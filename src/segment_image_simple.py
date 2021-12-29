@@ -85,7 +85,7 @@ def prepare_segmented_img(img, cnt_translated, shape_translated, bbox):
 
     result_img = cv2.bitwise_and(mask, crop)
 
-    result_img = cv2.resize(result_img, (220, 220), interpolation=cv2.INTER_AREA)
+    result_img = cv2.resize(result_img, (227, 227), interpolation=cv2.INTER_AREA)
 
     return result_img
 
