@@ -1,12 +1,12 @@
 import numpy as np
 
 
-def calculate_mass(points, echiniscus=False):
-    # if mass of Echiniscus specie is  estimating, use different equation
+def calculate_mass(points, scale=1, echiniscus=False):
+    # If the mass of the species Echiniscus is estimated, use different equation
     # TODO: pass nn input image scale factors and multiply with length and width
     head, ass, right, left = points
-    length = np.linalg.norm(head - ass)
-    width = np.linalg.norm(right - left)
+    length = np.linalg.norm(head - ass) * scale
+    width = np.linalg.norm(right - left) * scale
     R = length / width
     density = 1.04
 

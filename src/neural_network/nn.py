@@ -8,10 +8,13 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
+
 from mass_calculation import calculate_mass
+from src.utils import resize_pad
 
 
 class PoseNet(nn.Module):
+    # Alexnet architecture
     def __init__(self):
         super().__init__()
         self.layers = nn.Sequential(
@@ -57,6 +60,7 @@ class TardigrdeDatset(Dataset):
         self.colour = colour
         self.test = test
         self.test_ratio = test_ratio
+        self.img_shape = 0
 
         images, labels_points = self.load_labels()
         self.images = torch.from_numpy(images)
@@ -76,7 +80,7 @@ class TardigrdeDatset(Dataset):
         files = glob.glob(str(self.dataset_dir) + '/*.json')
         test_files_number = round(len(files) * self.test_ratio)
         images, labels_points = [], []
-        img_shape = 0
+
         for i, file in enumerate(files):
             if self.test:
                 if i >= test_files_number:
@@ -86,17 +90,17 @@ class TardigrdeDatset(Dataset):
                     continue
             data_dict = json.load(open(file, "r"))
             points = np.array(data_dict["key_points"], dtype=np.float32).flatten()
-            image = cv2.imread(str(file)[:-4] + "png", 1 if self.colour else 0)
+            image = resize_pad(cv2.imread(str(file)[:-4] + "png", 1 if self.colour else 0))
             labels_points.append(points)
             images.append(image.astype(np.float32))
 
-            if img_shape == 0:
+            if self.img_shape == 0:
                 self.img_shape = image.shape[0]
 
         return np.array(images), np.array(labels_points)
 
 
-def load_data(dataset_path, batch_size=4, shuffle=False, num_workers=2, test=False, test_ratio=0.1):
+def load_data(dataset_path, batch_size=4, shuffle=False, num_workers=0, test=False, test_ratio=0.1):
     dataset = TardigrdeDatset(dataset_path, test=test, test_ratio=test_ratio)
     dataloader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
 
@@ -113,13 +117,13 @@ def get_contours_labels(dataset_dir):
     return contours_points
 
 
-def train(dataset_path, device, model, checkpoints_save_interval=None, save_plots=True):
+def train(dataset_path, device, model, checkpoint_save_interval=None, save_plots=True):
     loss_function = nn.MSELoss()
     learning_rate = 0.01
-    epochs = 50
+    epochs = 60
     batch_size = 1
     optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
-    dataloader = load_data(dataset_path, test=False, test_ratio=0.1, shuffle=False, batch_size=batch_size)
+    dataloader = load_data(dataset_path, test=False, test_ratio=TEST_RATIO, shuffle=False, batch_size=batch_size)
     loss_epochs = []
 
     for epoch in range(epochs):
@@ -136,14 +140,14 @@ def train(dataset_path, device, model, checkpoints_save_interval=None, save_plot
 
             epoch_loss.append(loss.item())
 
-        if checkpoints_save_interval:
-            if epoch % checkpoints_save_interval == 0:
+        if checkpoint_save_interval:
+            if epoch % checkpoint_save_interval == 0:
                 torch.save(model.state_dict(), f"checkpoints/pose_net_checkpoint{epoch}.pth")
 
         if (epoch + 1) % 10 == 0:
             print(f"epoch: {epoch + 1}, loss={loss.item()}:.4f")
 
-        loss_epochs.append(np.mean(epoch_loss))
+        loss_epochs.append(np.mean(epoch_loss))  # mean epoch loss
 
     if save_plots:
         out_path = Path("./training_results")
@@ -165,7 +169,7 @@ def predict(dataset_path, device, model=None):
 
     with torch.no_grad():
         total_mass = 0
-        dataloader = load_data(dataset_path, shuffle=False, batch_size=1, test=True, test_ratio=0.1)
+        dataloader = load_data(dataset_path, shuffle=False, batch_size=1, test=False, test_ratio=TEST_RATIO)
         contours = get_contours_labels(dataset_path)
         for i, (data_sample, label) in enumerate(dataloader):
             input_tensor = data_sample.to(device)
@@ -178,25 +182,38 @@ def predict(dataset_path, device, model=None):
             mass = calculate_mass(predicted.numpy())
             total_mass += mass
             contour = contours[i]
+            image = data_sample.view([227, 227, 3]).numpy()
+            image = image.astype(np.uint8)
+            for pt in predicted:
+                x, y = pt
+                x = round(x.item() * 227)
+                y = round(y.item() * 227)
+                cv2.circle(image, (x, y), radius=2, thickness=2, color=(0, 0, 255))
+
+            cv2.imshow("image_predict", image)
+            cv2.waitKey(1000)
 
             fig = plt.figure()
             ax = fig.add_subplot(111)
             ax.scatter(contour[:, 0], contour[:, 1], color="red")
             ax.scatter(predicted[:, 0], predicted[:, 1], color="green", s=80)
             ax.scatter(single_label[:, 0], single_label[:, 1], color="blue", s=80)
+            plt.xlim([0, 1])
+            plt.ylim([0, 1])
             plt.show()
 
         print(f"Total mass: {total_mass}")
 
 
 if __name__ == '__main__':
+    TEST_RATIO = 0.0
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     print(f"Used device: {device}")
     dataset_path = Path("../images/dataset")
 
     net = PoseNet().to(device)
     print(f"Network architecture: {net.layers}")
-    trained_net = train(dataset_path, device, net, checkpoints_save_interval=0)
+    trained_net = train(dataset_path, device, net, checkpoint_save_interval=0)
     torch.save(trained_net.state_dict(), "checkpoints/pose_net.pth")
     print("Training finished")
 
