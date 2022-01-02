@@ -2,10 +2,10 @@ import cv2
 from easyocr import Reader
 
 
-def change_to_mm(text):
-    scales = {"um": 1000,
-              "mm": 1,
-              "cm": 0.1}
+def change_to_um(text):
+    scales = {"um": 1,
+              "mm": 0.001,
+              "cm": 0.0001}
 
     text = text.strip()
     text = "".join(text.split())
@@ -34,7 +34,7 @@ def read_scale(img, rect):
 
     result = filter(lambda res: res[2] > text_threshold, result)
     result = sorted(result, key=calc_dist, reverse=True)[0]
-    scale_value = change_to_mm(result[1])
+    scale_value = change_to_um(result[1])
 
-    output = {"pix": w, "mm": scale_value}
+    output = {"pix": w, "um": scale_value}
     return output

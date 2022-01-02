@@ -3,6 +3,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+
 from scale_detector.scale_detector import read_scale
 
 
