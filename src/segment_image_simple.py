@@ -2,11 +2,12 @@ import argparse
 import json
 from pathlib import Path
 
+from scale_detector.scale_detector import read_scale  # needs to be before import cv2, to avoid SIGSEGV
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 
-from src.utils import resize_pad
+from utils import resize_pad
 
 
 def parse_args():
@@ -157,6 +158,10 @@ def main(args):
             rect = cv2.boundingRect(c)
             x, y, w, h = rect
 
+            if ind == 0:
+                image_scale = read_scale(img, rect)
+                print(f"Image scale: {image_scale}")
+
             cnt_normalized, cnt_translated, center, shape_translated = prepare_contours(rect_tilted, rect, c)
             label_img(img, cnt_normalized, cnt_translated, center, shape_translated, rect)
 
@@ -164,7 +169,7 @@ def main(args):
             cv2.drawContours(img, [box], 0, (0, 0, 255))
             img = cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
             thresh = cv2.cvtColor(thresh, cv2.COLOR_GRAY2BGR)
-            cv2.imwrite(f'./crops/tard_{ind}.png', cv2.resize(thresh[y: y + h, x: x + w], (0, 0), fx=2, fy=2))
+            # cv2.imwrite(f'./crops/tard_{ind}.png', cv2.resize(thresh[y: y + h, x: x + w], (0, 0), fx=2, fy=2))
             thresh = cv2.cvtColor(thresh, cv2.COLOR_BGR2GRAY)
 
             ind += 1
