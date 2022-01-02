@@ -9,8 +9,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
 
-from mass_calculation import calculate_mass
-from src.utils import resize_pad
+from src.utils import resize_pad, calculate_mass
 
 
 class PoseNet(nn.Module):
