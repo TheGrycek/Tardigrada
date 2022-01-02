@@ -1,4 +1,9 @@
-opencv-python
-opencv-contrib-python
+opencv-python==4.4.0.42
+opencv-python-headless
 scipy
-easyocr
+numpy
+Pillow
+scikit-image
+python-bidi
+PyYAML
+easyocr==1.4.1
