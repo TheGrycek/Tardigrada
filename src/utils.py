@@ -1,40 +1,61 @@
 import cv2
 import numpy as np
+from key_points_detector.dataset import resize_pad
 
 
-def resize_pad(image, img_size=None, new_size=227, get_scales_only=False):
-    if image is not None:
-        img_size = image.shape[:2]
+def normalize_points(bbox, points, center):
+    new_size = 227
+    ratio, (left, right, top, bottom) = resize_pad(None, get_scales_only=True, img_size=bbox[-2:],
+                                                   new_size=new_size)
+    x = points[:, :, 0].flatten()
+    y = points[:, :, 1].flatten()
 
-    ratio = float(new_size) / max(img_size)
-    new_shape = [int(im * ratio) for im in img_size]
+    max_x, min_x = np.max(x), np.min(x)
+    max_y, min_y = np.max(y), np.min(y)
 
-    pad_x = new_size - new_shape[1]
-    pad_y = new_size - new_shape[0]
-    left, top = pad_x // 2, pad_y // 2
-    right, bottom = pad_x - (pad_x // 2), pad_y - (pad_y // 2)
+    center_x = (center[0] - min_x) / (max_x - min_x)
+    center_y = (center[1] - min_y) / (max_y - min_y)
 
-    if get_scales_only:
-        return ratio, (left, right, top, bottom)
+    scale_x, scale_y = (abs(max_x - min_x), abs(max_y - min_y))
 
-    resized_img = cv2.resize(image, (new_shape[1], new_shape[0]), interpolation=cv2.INTER_AREA)
+    points_resized = points.astype(np.float64)
+    points_resized[:, :, 0] -= min_x
+    points_resized[:, :, 1] -= min_y
+    points_resized *= ratio
+    points_resized = points_resized.astype(np.int32)
+    points_resized[:, :, 0] += top
+    points_resized[:, :, 1] += left
 
-    return cv2.copyMakeBorder(resized_img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=(0, 0, 0))
+    shape_translated = [[0, 0], [max_x - min_x, max_y - min_y]]
+
+    new_points = []
+    new_points_translated = []
+    for pt, pt_r, in zip(points, points_resized):
+        x = pt_r[0][0] / new_size
+        y = pt_r[0][1] / new_size
+        xt, yt = pt[0][0] - min_x, pt[0][1] - min_y
+
+        new_points_translated.append([xt, yt])
+        new_points.append([x, y])
+
+    new_points.append(new_points[0])  # CLOSE CONTOUR
+    # print(f"SCALE X: {scale_x}, SCALE Y: {scale_y}")
+
+    return new_points, new_points_translated, (center_x, center_y), (scale_x, scale_y), shape_translated
 
 
-def calculate_mass(points, scale=1, echiniscus=False):
-    # If the mass of the species Echiniscus is estimated, use different equation
-    # TODO: pass nn input image scale factors and multiply with length and width
-    head, ass, right, left = points
-    length = np.linalg.norm(head - ass) * scale
-    width = np.linalg.norm(right - left) * scale
-    R = length / width
-    density = 1.04
+def prepare_segmented_img(img, cnt_translated, shape_translated, bbox):
+    mask = np.zeros((shape_translated[1][1] + 1, shape_translated[1][0] + 1, 3), dtype=np.uint8)
+    cv2.drawContours(mask, [np.array(cnt_translated)], -1, (255, 255, 255), thickness=cv2.FILLED)
 
-    if echiniscus:
-        mass = (1 / 12) * length * np.pi * (length / R) ** 0.5 * density * 10 ** -6  # [ug]
-    else:
-        mass = length * np.pi * (length / 2 * R) ** 0.5 * density * 10 ** -6  # [ug]
+    x, y, w, h, = bbox
+    result_img = cv2.bitwise_and(mask, img[y: y + h, x: x + w])
 
-    print(f"length / width: {R}, mass: {mass}")
-    return mass
+    return result_img
+
+
+def prepare_contours(rect_tilted, rect, cnt):
+    center_unscaled, size, angle = rect_tilted[0], rect_tilted[1], rect_tilted[2]
+    cnt_normalized, cnt_translated, center, scale, shape_translated = normalize_points(rect, cnt, center_unscaled)
+
+    return cnt_normalized, cnt_translated, center, shape_translated

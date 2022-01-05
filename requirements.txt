@@ -1,3 +1,4 @@
+albumentations
 opencv-python==4.4.0.42
 opencv-python-headless
 scipy
