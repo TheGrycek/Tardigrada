@@ -7,7 +7,7 @@ import torch
 
 import config as cfg
 from dataset import load_data, get_contours_labels
-from model import PoseNet
+from model import Alexnet
 
 
 def train(dataset_path, device, model, checkpoint_save_interval=None, save_plots=True):
@@ -58,7 +58,7 @@ def train(dataset_path, device, model, checkpoint_save_interval=None, save_plots
 
 def predict(dataset_path, device, model=None):
     if model == None:
-        model = PoseNet().to(device)
+        model = Alexnet().to(device)
         model.load_state_dict(torch.load("./checkpoints/pose_net.pth"))
 
     with torch.no_grad():
@@ -99,7 +99,7 @@ if __name__ == '__main__':
     print(f"Used device: {cfg.DEVICE}")
     dataset_path = Path("../images/dataset")
 
-    model = PoseNet().to(cfg.DEVICE)
+    model = Alexnet().to(cfg.DEVICE)
     print(f"Network architecture: {model.layers}")
     trained_net = train(dataset_path, cfg.DEVICE, model, checkpoint_save_interval=cfg.CHECKPOINT_SAVE_INTERVAL)
     torch.save(trained_net.state_dict(), "checkpoints/pose_net.pth")

@@ -1,7 +1,7 @@
 import torch.nn as nn
 
 
-class PoseNet(nn.Module):
+class Alexnet(nn.Module):
     # Alexnet architecture
     def __init__(self):
         super().__init__()

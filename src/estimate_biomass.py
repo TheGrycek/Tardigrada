@@ -36,7 +36,7 @@ def calculate_mass(points, scale, img_ratio=1, echiniscus=False):
     if echiniscus:
         mass = (1 / 12) * length * np.pi * (length / R) ** 0.5 * density * 10 ** -6  # [ug]
     else:
-        mass = length * np.pi * (length / 2 * R) ** 0.5 * density * 10 ** -6  # [ug]
+        mass = length * np.pi * (length / (2 * R)) ** 0.5 * density * 10 ** -6  # [ug]
 
     print(f"length / width: {R}, mass: {mass}")
     return mass
