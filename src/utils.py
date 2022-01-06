@@ -1,6 +1,51 @@
 import cv2
 import numpy as np
+
 from key_points_detector.dataset import resize_pad
+
+
+class COCOFormat:
+    def __init__(self):
+        self.coco_format = {
+            "info": {
+                "description": "Tardigrada 2022 Dataset",
+                "version": 1.0,
+                "date_created": "06.01.2022"
+            },
+            "images": [],
+            "annotations": [],
+            "categories": [
+                {
+                    "id": 1,
+                    "name": "scale"
+                },
+                {
+                    "id": 2,
+                    "name": "tardigrade"
+                },
+                {
+                    "id": 3,
+                    "name": "tardigrade_echiniscus"
+                }
+            ]
+        }
+
+        self.image = {
+            "id": 0,
+            "width": 0,
+            "height": 0,
+            "file_name": ""
+        }
+
+        self.annotations = {
+            "id": 0,
+            "iscrowd": 0,
+            "image_id": 0,
+            "category_id": 0,
+            "segmentation": [],
+            "bbox": [],
+            "area": 0
+        }
 
 
 def normalize_points(bbox, points, center):
