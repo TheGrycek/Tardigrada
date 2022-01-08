@@ -12,7 +12,6 @@ Estimate tardigrade biomass in the images:
 python estimate_biomass.py -i ./images
 ````
 
-
 ### References
 [1] Hallas, T. E., & Yeates, G. W. (1972). Tardigrada of the soil and litter of a Danish beech forest. Pedobiologia.
 
