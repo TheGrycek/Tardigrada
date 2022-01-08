@@ -11,14 +11,12 @@ from torch.utils.data import Dataset, DataLoader
 
 
 class PoseKeypointsDatset(Dataset):
-    def __init__(self, dataset_dir, img_size=227, test=True, test_ratio=0.1, transform=True, colour=True):
+    def __init__(self, dataset_dir, img_size=227, transform=True, colour=True):
         super().__init__()
         self.img_size = img_size
         self.dataset_dir = dataset_dir
         self.transform = transform
         self.colour = colour
-        self.test = test
-        self.test_ratio = test_ratio
         self.img_shape = 0
 
         self.images, self.labels = self.load_labels()
@@ -46,16 +44,9 @@ class PoseKeypointsDatset(Dataset):
 
     def load_labels(self):
         files = glob.glob(str(self.dataset_dir) + '/*.json')
-        test_files_number = round(len(files) * self.test_ratio)
         images, labels_points = [], []
 
         for i, file in enumerate(files):
-            if self.test:
-                if i >= test_files_number:
-                    break
-            else:
-                if i < test_files_number:
-                    continue
             data_dict = json.load(open(file, "r"))
             points = np.array(data_dict["key_points"], dtype=np.float32)
             ratio, image = resize_pad(cv2.imread(str(file)[:-4] + "png", 1 if self.colour else 0))
@@ -121,8 +112,22 @@ def get_contours_labels(dataset_dir):
     return contours_points
 
 
-def load_data(dataset_path, batch_size=4, transform=True, shuffle=False, num_workers=0, test=False, test_ratio=0.1):
-    dataset = PoseKeypointsDatset(dataset_path, transform=transform, test=test, test_ratio=test_ratio)
+def load_data(dataset_path, batch_size=4, transform=True, shuffle=False, num_workers=0,
+              train_test_split=False, test_ratio=0.1):
+    dataset = PoseKeypointsDatset(dataset_path, transform=transform)
+
+    if train_test_split:
+        if test_ratio > 0:
+            dataset_len = len(dataset)
+            torch.manual_seed(1)
+            indices = torch.randperm(dataset_len).tolist()
+            dataset = torch.utils.data.Subset(dataset, indices[:-int(np.ceil(dataset_len * test_ratio))])
+            dataset_test = torch.utils.data.Subset(dataset, indices[int(-np.ceil(dataset_len * test_ratio)):])
+            dataloader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
+            dataloader_test = DataLoader(dataset=dataset_test, batch_size=batch_size, shuffle=shuffle,
+                                         num_workers=num_workers)
+            return dataloader, dataloader_test
+
     dataloader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
 
-    return dataloader
+    return dataloader, None

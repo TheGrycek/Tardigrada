@@ -12,12 +12,12 @@ from model import AlexNet
 
 def train(dataset_path, device, model, checkpoint_save_interval=None, save_plots=True):
     optimizer = torch.optim.SGD(model.parameters(), lr=cfg.LEARNING_RATE)
-    dataloader = load_data(dataset_path,
-                           test_ratio=cfg.TEST_RATIO,
-                           batch_size=cfg.BATCH_SIZE,
-                           transform=True,
-                           test=False,
-                           shuffle=False)
+    dataloader, dataloader_test = load_data(dataset_path,
+                                            test_ratio=cfg.TEST_RATIO,
+                                            batch_size=cfg.BATCH_SIZE,
+                                            transform=False,
+                                            train_test_split=True,
+                                            shuffle=True)
     loss_epochs = []
 
     for epoch in range(cfg.EPOCHS):
@@ -62,8 +62,8 @@ def predict(dataset_path, device, model=None):
         model.load_state_dict(torch.load("./checkpoints/pose_net.pth"))
 
     with torch.no_grad():
-        dataloader = load_data(dataset_path, transform=False, shuffle=False, batch_size=1,
-                               test=False, test_ratio=cfg.TEST_RATIO)
+        dataloader, dataloader_test = load_data(dataset_path, transform=False, shuffle=False, batch_size=1,
+                                                train_test_split=True, test_ratio=cfg.TEST_RATIO)
         contours = get_contours_labels(dataset_path)
         for i, (data_sample, label) in enumerate(dataloader):
             input_tensor = data_sample.to(device)
