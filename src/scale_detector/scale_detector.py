@@ -1,5 +1,6 @@
 import cv2
 from easyocr import Reader
+import torch
 
 
 def change_to_um(text):
@@ -16,8 +17,9 @@ def change_to_um(text):
     return value
 
 
-def read_scale(img, rect):
-    reader = Reader(['en'])
+def read_scale(img, rect, device="cpu"):
+    reader = Reader(['en'], gpu=True if device == "gpu" else False)
+
     x, y, w, h = rect
     # img = cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
     result = reader.readtext(img,
