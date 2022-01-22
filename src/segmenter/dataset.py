@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 
 import cv2
@@ -6,6 +5,8 @@ import numpy as np
 import torch
 from pycocotools.coco import COCO
 from torch.utils.data import Dataset, DataLoader
+
+import config as cfg
 
 
 class SegmentationDataset(Dataset):
@@ -64,17 +65,28 @@ class SegmentationDataset(Dataset):
         return len(self.ids)
 
 
-def load_data(images_dir, batch_size=1, transform=True, shuffle=False, num_workers=0):
-    dataset = SegmentationDataset(images_dir=images_dir,
-                                  annotation_file="../labels_tardigrada_2022-01-07-20-11-35-797274.json")
-    dataloader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
+def collate_function(batch):
+    images_list = []
+    targets_list = []
+
+    for img, targets in batch:
+        images_list.append(img)
+        targets_list.append(targets)
+
+    return images_list, targets_list
+
+
+def load_data(images_dir, annotation_file="../labels_tardigrada_2022-01-07-20-11-35-797274.json",
+              transform=True, shuffle=False):
+    dataset = SegmentationDataset(images_dir=images_dir, annotation_file=annotation_file)
+    dataloader = DataLoader(dataset=dataset, collate_fn=collate_function,
+                            batch_size=cfg.BATCH_SIZE, shuffle=shuffle, num_workers=cfg.NUM_WORKERS)
 
     return dataloader
 
 
 if __name__ == '__main__':
-    dataset = SegmentationDataset(images_dir="../images",
-                                  annotation_file="../labels_tardigrada_2022-01-07-20-11-35-797274.json")
+    dataloader = load_data(images_dir="../images")
 
-    for img, annotation in dataset:
+    for img, annotation in dataloader:
         print(annotation)

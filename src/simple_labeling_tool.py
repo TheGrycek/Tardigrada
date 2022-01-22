@@ -7,7 +7,7 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 
-from segmenter.segmenter import simple_segmenter
+from segmenter.model import simple_segmenter
 from utils import prepare_segmented_img, prepare_contours
 
 

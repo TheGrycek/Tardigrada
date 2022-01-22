@@ -1,4 +1,19 @@
 import cv2
+import torch
+from torch.nn import Conv2d, Linear
+from torchvision.models.detection import maskrcnn_resnet50_fpn
+
+
+def segmenter():
+    model = maskrcnn_resnet50_fpn(pretrained=True, pretrained_backbone=True)
+    torch.manual_seed(1)
+    new_conv2d = Conv2d(256, 3, kernel_size=(1, 1), stride=(1, 1))
+    model.roi_heads.mask_predictor.mask_fcn_logits = new_conv2d
+
+    new_linear = Linear(in_features=1024, out_features=3, bias=True)
+    model.roi_heads.box_predictor.cls_score = new_linear
+
+    return model
 
 
 def filter_cnts(cnts):
