@@ -1,3 +1,4 @@
+import glob
 import argparse
 import datetime
 import json
@@ -11,7 +12,7 @@ from utils import COCOFormat
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-i", "--input_dir", type=Path, default="./images/krio5_OM_1.5_1.jpg",
+    parser.add_argument("-i", "--input_dir", type=Path, default="./images",
                         help="Input images directory.")
     parser.add_argument("-o", "--output_dir", type=Path, default="./images/",
                         help="Output images directory.")
@@ -76,19 +77,8 @@ def white_borders(mask):
     return mask
 
 
-def save_annotations(cnts, areas, bboxes, img_name, img_shape, img_num=1):
-    current_date = datetime.datetime.now()
-    current_date = str(current_date)
-
-    for char in (" ", ":", ".", "-"):
-        current_date = current_date.replace(char, "-")
-
-    file_name = "labels_tardigrada_" + current_date + ".json"
-
-    coco = COCOFormat()
-    coco_format = coco.coco_format
-
-    image_dict = coco.image
+def save_annotations(coco_format, coco, cnts, areas, bboxes, img_name, img_shape, img_num=1):
+    image_dict = coco.image.copy()
     image_dict["id"] = img_num
     image_dict["width"] = img_shape[1]
     image_dict["height"] = img_shape[0]
@@ -109,66 +99,86 @@ def save_annotations(cnts, areas, bboxes, img_name, img_shape, img_num=1):
 
         coco_format["annotations"].append(annotation_dict)
 
+    return coco_format
+
+
+def annotations2file(annotations):
+    current_date = datetime.datetime.now()
+    current_date = str(current_date)
+
+    for char in (" ", ":", "."):
+        current_date = current_date.replace(char, "-")
+
+    file_name = "labels_tardigrada_" + current_date + ".json"
     out_file = open(file_name, "w")
-    json.dump(coco_format, out_file, indent=6)
+    json.dump(annotations, out_file, indent=6)
     out_file.close()
 
 
 def main(args):
-    img_path = args.input_dir
-    img = cv2.imread(str(img_path))
-    img_shape = img.shape
+    files = glob.glob(str(args.input_dir) + '/*.jpg')
 
-    cv2.namedWindow('control_panel', 2)
-    cv2.resizeWindow("control_panel", 550, 300)
+    coco = COCOFormat()
+    coco_format = coco.coco_format
 
-    cv2.createTrackbar('low H', 'control_panel', 0, 179, callback)
-    cv2.createTrackbar('high H', 'control_panel', 179, 179, callback)
+    for img_num, img_path in enumerate(files):
+        img = cv2.imread(str(img_path))
+        img_shape = img.shape
 
-    cv2.createTrackbar('low S', 'control_panel', 0, 255, callback)
-    cv2.createTrackbar('high S', 'control_panel', 255, 255, callback)
+        cv2.namedWindow('control_panel', 2)
+        cv2.resizeWindow("control_panel", 550, 300)
 
-    cv2.createTrackbar('low V', 'control_panel', 170, 255, callback)
-    cv2.createTrackbar('high V', 'control_panel', 255, 255, callback)
+        cv2.createTrackbar('low H', 'control_panel', 0, 179, callback)
+        cv2.createTrackbar('high H', 'control_panel', 179, 179, callback)
 
-    cv2.createTrackbar('show_annotation', 'control_panel', 0, 1, callback)
+        cv2.createTrackbar('low S', 'control_panel', 0, 255, callback)
+        cv2.createTrackbar('high S', 'control_panel', 255, 255, callback)
 
-    cv2.createTrackbar('max length/width ratio', 'control_panel', 200, 200, callback)
-    cv2.createTrackbar('min length/width ratio', 'control_panel', 0, 200, callback)
+        cv2.createTrackbar('low V', 'control_panel', 170, 255, callback)
+        cv2.createTrackbar('high V', 'control_panel', 255, 255, callback)
 
-    cv2.createTrackbar('min area', 'control_panel', 800, 30000, callback)
-    cv2.createTrackbar('max area', 'control_panel', 50000, 50000, callback)
+        cv2.createTrackbar('show_annotation', 'control_panel', 0, 1, callback)
 
-    cv2.createTrackbar('white border', 'control_panel', 120, 300, callback)
+        cv2.createTrackbar('max length/width ratio', 'control_panel', 200, 200, callback)
+        cv2.createTrackbar('min length/width ratio', 'control_panel', 0, 200, callback)
 
-    while True:
-        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        cv2.createTrackbar('min area', 'control_panel', 800, 30000, callback)
+        cv2.createTrackbar('max area', 'control_panel', 50000, 50000, callback)
 
-        hsv_low = np.array([low_h, low_s, low_v], np.uint8)
-        hsv_high = np.array([high_h, high_s, high_v], np.uint8)
+        cv2.createTrackbar('white border', 'control_panel', 120, 300, callback)
 
-        mask = cv2.inRange(hsv, hsv_low, hsv_high)
-        res = cv2.bitwise_and(img, img, mask=mask)
+        while True:
+            hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 
-        mask = white_borders(mask)
-        cnts, areas, bboxes = find_contours(mask)
+            hsv_low = np.array([low_h, low_s, low_v], np.uint8)
+            hsv_high = np.array([high_h, high_s, high_v], np.uint8)
 
-        if show_ann == 1:
-            cv2.drawContours(res, cnts, -1, (0, 0, 255), 3)
+            mask = cv2.inRange(hsv, hsv_low, hsv_high)
+            res = cv2.bitwise_and(img, img, mask=mask)
 
-        cv2.imshow('mask', cv2.resize(mask, (1200, 800)))
-        cv2.imshow('masked_img', cv2.resize(res, (1200, 800)))
+            mask = white_borders(mask)
+            cnts, areas, bboxes = find_contours(mask)
 
-        k = cv2.waitKey(1) & 0xFF
-        if k == 27:
-            print("Keyboard Interrupt.")
-            save_annotations(cnts, areas, bboxes, img_path.name, img_shape)
-            break
-        elif k == 115:
-            save_annotations(cnts, areas, bboxes, img_path.name, img_shape)
-            print("Annotations saved.")
+            if show_ann == 1:
+                cv2.drawContours(res, cnts, -1, (0, 0, 255), 3)
 
-    cv2.destroyAllWindows()
+            cv2.imshow('mask', cv2.resize(mask, (1200, 800)))
+            cv2.imshow('masked_img', cv2.resize(res, (1200, 800)))
+
+            k = cv2.waitKey(1) & 0xFF
+            if k == 27:
+                print("Keyboard Interrupt.")
+                coco_format = save_annotations(coco_format, coco, cnts, areas, bboxes,
+                                               Path(img_path).name, img_shape, img_num)
+                break
+            elif k == 115:
+                coco_format = save_annotations(coco_format, coco, cnts, areas, bboxes,
+                                               Path(img_path).name, img_shape, img_num)
+                print("Annotations saved.")
+
+        cv2.destroyAllWindows()
+
+    annotations2file(coco_format)
 
 
 if __name__ == '__main__':
