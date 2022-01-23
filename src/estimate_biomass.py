@@ -6,9 +6,9 @@ import numpy as np
 import torch
 
 from key_points_detector.config import INPUT_IMAGE_SIZE
-from key_points_detector.model import PoseNet
+from key_points_detector.model import AlexNet
 from scale_detector.scale_detector import read_scale
-from segmenter.segmenter import simple_segmenter
+from segmenter.model import simple_segmenter
 from utils import prepare_segmented_img, prepare_contours, resize_pad
 
 
@@ -44,7 +44,8 @@ def calculate_mass(points, scale, img_ratio=1, echiniscus=False):
 
 def main(args):
     images = args.input_dir.glob("*.jpg")
-    model = PoseNet()
+
+    model = AlexNet()
     model.load_state_dict(torch.load("./key_points_detector/checkpoints/pose_net.pth"))
 
     for img_path in images:

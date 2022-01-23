@@ -7,17 +7,18 @@ import torch
 
 import config as cfg
 from dataset import load_data, get_contours_labels
-from model import Alexnet
+from model import AlexNet
 
 
 def train(dataset_path, device, model, checkpoint_save_interval=None, save_plots=True):
     optimizer = torch.optim.SGD(model.parameters(), lr=cfg.LEARNING_RATE)
-    dataloader = load_data(dataset_path,
-                           test_ratio=cfg.TEST_RATIO,
-                           batch_size=cfg.BATCH_SIZE,
-                           transform=True,
-                           test=False,
-                           shuffle=False)
+
+    dataloader, dataloader_test = load_data(dataset_path,
+                                            test_ratio=cfg.TEST_RATIO,
+                                            batch_size=cfg.BATCH_SIZE,
+                                            transform=False,
+                                            train_test_split=True,
+                                            shuffle=True)
     loss_epochs = []
 
     for epoch in range(cfg.EPOCHS):
@@ -58,12 +59,12 @@ def train(dataset_path, device, model, checkpoint_save_interval=None, save_plots
 
 def predict(dataset_path, device, model=None):
     if model == None:
-        model = Alexnet().to(device)
+        model = AlexNet().to(device)
         model.load_state_dict(torch.load("./checkpoints/pose_net.pth"))
 
     with torch.no_grad():
-        dataloader = load_data(dataset_path, transform=False, shuffle=False, batch_size=1,
-                               test=False, test_ratio=cfg.TEST_RATIO)
+        dataloader, dataloader_test = load_data(dataset_path, transform=False, shuffle=False, batch_size=1,
+                                                train_test_split=True, test_ratio=cfg.TEST_RATIO)
         contours = get_contours_labels(dataset_path)
         for i, (data_sample, label) in enumerate(dataloader):
             input_tensor = data_sample.to(device)
@@ -99,7 +100,7 @@ if __name__ == '__main__':
     print(f"Used device: {cfg.DEVICE}")
     dataset_path = Path("../images/dataset")
 
-    model = Alexnet().to(cfg.DEVICE)
+    model = AlexNet().to(cfg.DEVICE)
     print(f"Network architecture: {model.layers}")
     trained_net = train(dataset_path, cfg.DEVICE, model, checkpoint_save_interval=cfg.CHECKPOINT_SAVE_INTERVAL)
     torch.save(trained_net.state_dict(), "checkpoints/pose_net.pth")
