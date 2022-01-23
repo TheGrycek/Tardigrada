@@ -12,6 +12,7 @@ from model import AlexNet
 
 def train(dataset_path, device, model, checkpoint_save_interval=None, save_plots=True):
     optimizer = torch.optim.SGD(model.parameters(), lr=cfg.LEARNING_RATE)
+
     dataloader, dataloader_test = load_data(dataset_path,
                                             test_ratio=cfg.TEST_RATIO,
                                             batch_size=cfg.BATCH_SIZE,

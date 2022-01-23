@@ -17,6 +17,7 @@ class PoseKeypointsDatset(Dataset):
         self.dataset_dir = dataset_dir
         self.transform = transform
         self.colour = colour
+
         self.img_shape = 0
 
         self.images, self.labels = self.load_labels()
@@ -131,3 +132,4 @@ def load_data(dataset_path, batch_size=4, transform=True, shuffle=False, num_wor
     dataloader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
 
     return dataloader, None
+

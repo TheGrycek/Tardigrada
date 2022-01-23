@@ -44,6 +44,7 @@ def calculate_mass(points, scale, img_ratio=1, echiniscus=False):
 
 def main(args):
     images = args.input_dir.glob("*.jpg")
+
     model = AlexNet()
     model.load_state_dict(torch.load("./key_points_detector/checkpoints/pose_net.pth"))
 
