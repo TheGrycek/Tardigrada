@@ -1,31 +1,19 @@
-import random
 from pathlib import Path
 
 import cv2
 import numpy as np
 import torch
+import torchvision.transforms.functional as F
 
 import config as cfg
 from dataset import load_data
-from model import segmenter
+from model import keypoint_detector
 
 import matplotlib.pyplot as plt  # TODO: matplotlib must be imported after torchvision model to avoid SIGSEGV error!
 
 
-def colour_mask(mask):
-    mask = mask[0]
-    mask[mask >= 0.2] = 255
-    mask = mask.astype(np.uint8)
-    channels = [np.ones_like(mask) * random.randrange(0, 255, 1) for _ in range(3)]
-
-    mask_colour = np.stack(channels, axis=2)
-    mask = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
-
-    return cv2.bitwise_and(mask, mask_colour)
-
-
 def train(device, checkpoint_save_interval=True, save_plots=True):
-    model = segmenter()
+    model = keypoint_detector()
     model.to(device)
     optimizer = torch.optim.SGD(model.parameters(),
                                 lr=cfg.LEARNING_RATE,
@@ -33,12 +21,12 @@ def train(device, checkpoint_save_interval=True, save_plots=True):
                                 weight_decay=cfg.WEIGHT_DECAY)
 
     dataloader = load_data(images_dir="../images",
-                           annotation_file="../labels_tardigrada_2022-01-07-20-11-35-797274.json")
+                           annotation_file="../Tardigrada-5.json")
 
     losses = {"loss_total": [],
               "loss_classifier": [],
               "loss_box_reg": [],
-              "loss_mask": [],
+              "loss_keypoint": [],
               "loss_objectness": [],
               "loss_rpn_box_reg": []}
 
@@ -66,7 +54,7 @@ def train(device, checkpoint_save_interval=True, save_plots=True):
         if (epoch + 1) % 10 == 0:
             print(f"epoch: {epoch + 1}, loss={loss_total.item()}:.4f")
 
-    # torch.save(model.state_dict(), f"checkpoints/segmenter.pth")
+    torch.save(model.state_dict(), f"checkpoints/keypoints_detector.pth")
 
     if save_plots:
         out_path = Path("./training_results")
@@ -88,45 +76,45 @@ def train(device, checkpoint_save_interval=True, save_plots=True):
 
 
 def predict(img, device):
-    model = segmenter()
-    model.load_state_dict(torch.load("./checkpoints/segmenter.pth"))
+    model = keypoint_detector()
+    model.load_state_dict(torch.load("checkpoints/keypoints_detector.pth"))
     model.eval().to(device)
 
-    with torch.no_grad():
-        img_shape = img.shape
-        input_tensor = torch.from_numpy(img.astype(np.float32) / 255).to(device)
-        input_tensor = input_tensor.view([1, 3, img_shape[0], img_shape[1]])
-        predicted = model(input_tensor)[0]
-        bboxes = predicted["boxes"].cpu().detach().numpy()
-        labels = predicted["labels"].cpu().detach().numpy().astype(np.uint8)
-        scores = predicted["scores"].cpu().detach().numpy()
-        masks = predicted['masks'].cpu().detach().numpy()
-        print(f"SCORES: {scores}")
+    image_tensor = F.to_tensor(img).to(device)
+    predicted = model([image_tensor])[0]
 
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        for i in range(len(masks)):
-            rgb_mask = colour_mask(masks[i])
+    bboxes = predicted["boxes"].cpu().detach().numpy()
+    labels = predicted["labels"].cpu().detach().numpy().astype(np.uint8)
+    scores = predicted["scores"].cpu().detach().numpy()
+    keypoints = predicted['keypoints'].cpu().detach().numpy()
 
-            img = cv2.addWeighted(img, 1, rgb_mask, 0.9, 0)
+    for i in range(len(bboxes)):
+        bbox = bboxes[i]
+        pt1 = tuple(bbox[:2].astype(np.uint16))
+        pt2 = tuple(bbox[2:].astype(np.uint16))
 
-            pt1 = tuple(bboxes[i][:2].astype(np.uint16))
-            pt2 = tuple(bboxes[i][2:].astype(np.uint16))
-            cv2.rectangle(img, pt1, pt2, color=(0, 0, 255), thickness=2)
+        img = cv2.rectangle(img, pt1, pt2, (0, 0, 255), 2)
 
-            position = (int(bboxes[i][0]), int(bboxes[i][1]) + 100)
-            img = cv2.putText(img, cfg.INSTANCE_CATEGORY_NAMES[labels[i]],
-                        position, cv2.FONT_HERSHEY_SIMPLEX, fontScale=2, color=(255, 0, 0), thickness=2)
+        position = (int(bboxes[i][0]), int(bboxes[i][1]))
+        img = cv2.putText(img, cfg.INSTANCE_CATEGORY_NAMES[labels[i]],
+                          position, cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.7, color=(255, 0, 0), thickness=2)
 
-        plt.figure(figsize=(20, 30))
-        plt.imshow(img)
-        plt.xticks([])
-        plt.yticks([])
-        plt.show()
+        for j in range(len(keypoints[i])):
+            img = cv2.circle(img, center=(round(keypoints[i][j][0]), round(keypoints[i][j][1])),
+                             radius=2, color=(255, 0, 0), thickness=2)
+
+    cv2.imwrite("keypoint_rcnn_prediction.jpg", img)
+
+    plt.figure(figsize=(20, 30))
+    plt.imshow(img)
+    plt.xticks([])
+    plt.yticks([])
+    plt.show()
 
 
 if __name__ == '__main__':
-    img = cv2.imread("../images/krio5_OM_1.5_1.jpg")
+    img = cv2.imread("../images/krio5_OM_1.5_5.jpg")
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
     train(cfg.DEVICE, checkpoint_save_interval=False)
-    # predict(img, cfg.DEVICE)
+    predict(img, cfg.DEVICE)

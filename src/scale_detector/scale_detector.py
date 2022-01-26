@@ -1,6 +1,4 @@
-import cv2
 from easyocr import Reader
-import torch
 
 
 def change_to_um(text):
