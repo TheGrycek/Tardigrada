@@ -39,7 +39,12 @@ def predict(model, img, device):
             img = cv2.circle(img, center=(round(keypoints[i][j][0]), round(keypoints[i][j][1])),
                              radius=2, color=(255, 0, 255), thickness=2)
 
-    output = {"image": img, "keypoints": grouped_keypoints, "bboxes": bboxes, "labels": labels, "scores": scores}
+    output = {"image": img,
+              "keypoints": grouped_keypoints,
+              "bboxes": bboxes,
+              "labels": labels,
+              "scores": scores}
+
     return output
 
 

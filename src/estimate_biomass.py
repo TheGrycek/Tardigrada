@@ -16,6 +16,8 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--input_dir", type=Path, default="./images/",
                         help="Input images directory.")
+    parser.add_argument("-o", "--output_dir", type=Path, default="../results/",
+                        help="Outputs directory.")
 
     return parser.parse_args()
 
@@ -57,7 +59,6 @@ def calculate_mass(predicted, scale, img_path):
         head, ass, right, left = points
         length = np.sqrt(np.sum((head - ass) ** 2)) * scale_ratio
         width = np.sqrt(np.sum((left - right) ** 2)) * scale_ratio
-
         class_name = cfg.INSTANCE_CATEGORY_NAMES[predicted["labels"][i]]
 
         if length and width != np.nan:
@@ -69,21 +70,23 @@ def calculate_mass(predicted, scale, img_path):
             else:
                 mass = length * np.pi * (length / (2 * R)) ** 2 * density * 10 ** -6  # [ug]
 
-            # print(f"length: {length}, width: {width} R: {R}, mass: {mass}")
-            results.append({"img_path": img_path,
-                            "id": i,
-                            "class": class_name,
-                            "length": length,
-                            "width": width,
-                            "biomass": mass})
+            info = {"img_path": img_path,
+                    "id": i,
+                    "class": class_name,
+                    "length": length,
+                    "width": width,
+                    "biomass": mass}
+
+            # print(info)
+            results.append(info)
 
     return pd.DataFrame(results)
 
 
 def main(args):
-    Path("../results").mkdir(exist_ok=True, parents=True)
-    # images = args.input_dir.glob("*.jpg")
-    images = [Path("./images/krio5_OM_1.5_5.jpg")]
+    args.output_dir.mkdir(exist_ok=True, parents=True)
+    images = args.input_dir.glob("*.jpg")
+    # images = [Path("./images/krio5_OM_1.5_5.jpg")]
     model = keypoint_detector()
     model.load_state_dict(torch.load("keypoints_detector/checkpoints/keypoints_detector.pth"))
 
@@ -109,14 +112,14 @@ def main(args):
                      "number": (f"Animal number: {predicted['bboxes'].shape[0]}", (50, 100)),
                      "mass": (f"Total biomass: {round(mass_total, 5)} ug", (50, 150)),
                      "mean": (f"Animal mass mean: {round(mass_mean, 5)} ug", (50, 200)),
-                     "std": (f"Biomass std: {round(mass_std, 5)} ug", (50, 250))}
+                     "std": (f"Animal mass std: {round(mass_std, 5)} ug", (50, 250))}
 
         for text, position in info_dict.values():
             img = cv2.putText(img, text, position,
                               cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
 
-        results_df.to_csv(f"../results/{img_path.stem}_results.csv")
-        cv2.imwrite("../images/keypoint_rcnn_detection.jpg", img)
+        results_df.to_csv(args.output_dir / f"{img_path.stem}_results.csv")
+        cv2.imwrite(str(args.output_dir / f"{img_path.stem}_results.jpg"), img)
         cv2.imshow('predicted', cv2.resize(img, (0, 0), fx=0.5, fy=0.5))
         cv2.waitKey(2500)
 
