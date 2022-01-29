@@ -1,13 +1,14 @@
-import torch
 from torchvision.models.detection import keypointrcnn_resnet50_fpn
 
-import config as cfg
 
-
-def keypoint_detector():
-    torch.manual_seed(1)
-    model = keypointrcnn_resnet50_fpn(pretrained=False, pretrained_backbone=True,
-                                      num_classes=cfg.CLASSES_NUMBER, num_keypoints=cfg.KEYPOINTS)
+def keypoint_detector(num_classes=3, num_keypoints=4):
+    model = keypointrcnn_resnet50_fpn(pretrained=False,
+                                      pretrained_backbone=True,
+                                      num_classes=num_classes,
+                                      num_keypoints=num_keypoints,
+                                      box_nms_thresh=0.4,
+                                      rpn_score_thresh=0.90,
+                                      box_score_thresh=0.90)
 
     return model
 

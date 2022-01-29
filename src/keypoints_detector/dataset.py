@@ -87,11 +87,11 @@ class KeypointsDataset(Dataset):
                    alb.RGBShift(p=0.7)]
 
         transform = alb.Compose([
-            alb.Affine(p=0.9),
+            # alb.Affine(p=0.9),
             alb.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.2, always_apply=False, p=0.5),
             alb.OneOf(one_of, p=0.8),
             alb.OneOf(one_of, p=0.8),
-            alb.OneOf(one_of2, p=0.5),
+            # alb.OneOf(one_of2, p=0.5),
             # alb.normalize(mean=[], std=[], max_pixel_value=255)
             ],
             keypoint_params=alb.KeypointParams(format='xy', remove_invisible=False),
@@ -130,7 +130,7 @@ if __name__ == '__main__':
                 img = cv2.rectangle(img.copy(), pt1, pt2, (255, 0, 0), 2)
                 for keypoint in obj_keypoints:
                     center = (int(round(keypoint[0].item())), int(round(keypoint[1].item())))
-                    img = cv2.circle(img.copy(), center, 5, (0, 0, 255), 5)
+                    img = cv2.circle(img.copy(), center, 2, (0, 0, 255), 5)
 
             cv2.imshow("img", cv2.resize(img, (0, 0), fx=0.5, fy=0.5))
             cv2.waitKey(1500)

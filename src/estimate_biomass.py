@@ -5,10 +5,10 @@ import cv2
 import numpy as np
 import torch
 
+import keypoints_detector.config as cfg
+from keypoints_detector.model import keypoint_detector
+from keypoints_detector.predict import predict
 from scale_detector.scale_detector import read_scale
-# from keypoints_detector.model import keypoint_detector
-# from keypoints_detector.config import INPUT_IMAGE_SIZE
-# from utils import prepare_segmented_img, prepare_contours, resize_pad
 
 
 def parse_args():
@@ -46,33 +46,45 @@ def simple_segmenter(img):
     return cnts, bboxes_fit, bboxes, thresh
 
 
-def calculate_mass(points, scale, img_ratio=1, echiniscus=False):
-    # If the mass of the species Echiniscus is estimated, use different equation
-    # TODO: pass nn input image scale factors and multiply with length and width
-    head, ass, right, left = points
-    length_pix = np.linalg.norm(head - ass) * img_ratio
-    width_pix = np.linalg.norm(right - left) * img_ratio
-    scale_ratio = scale["pix"] * scale["um"]
-    length = scale_ratio / length_pix
-    width = scale_ratio / width_pix
+def calculate_mass(predicted, scale):
+    scale_ratio = scale["um"] / scale["pix"]
+    masses = np.array([])
 
-    R = length / width
-    density = 1.04
+    for i, points in enumerate(predicted["keypoints"]):
+        points = points.astype(np.uint64)
+        head, ass, right, left = points
+        length = np.sqrt(np.sum((head - ass) ** 2)) * scale_ratio
+        width = np.sqrt(np.sum((length - right) ** 2)) * scale_ratio
 
-    if echiniscus:
-        mass = (1 / 12) * length * np.pi * (length / R) ** 0.5 * density * 10 ** -6  # [ug]
-    else:
-        mass = length * np.pi * (length / (2 * R)) ** 0.5 * density * 10 ** -6  # [ug]
+        class_name = cfg.INSTANCE_CATEGORY_NAMES[predicted["labels"][i]]
+        mass = 0.0
+        R = 0.0
 
-    print(f"length / width: {R}, mass: {mass}")
-    return mass
+        if length and width != np.nan:
+            R = length / width
+            density = 1.04
+
+            # If the mass of the species Echiniscus is estimated, use different equation
+            if class_name == 'echiniscus':
+                mass = (1 / 12) * length * np.pi * (length / R) ** 0.5 * density * 10 ** -6  # [ug]
+            else:
+                mass = length * np.pi * (length / (2 * R)) ** 0.5 * density * 10 ** -6  # [ug]
+
+        # print(f"length / width: {R}, mass: {mass}")
+        masses = np.append(masses, mass)
+
+    total_mass = np.sum(masses)
+    mass_std = np.std(masses)
+    mass_mean = np.mean(masses)
+
+    return total_mass, mass_std, mass_mean
 
 
 def main(args):
     images = args.input_dir.glob("*.jpg")
 
-    # model = keypoint_detector()
-    # model.load_state_dict(torch.load("./keypoints_detector/checkpoints/keypoints_detector.pth"))
+    model = keypoint_detector()
+    model.load_state_dict(torch.load("keypoints_detector/checkpoints/keypoints_detector.pth"))
 
     for img_path in images:
         print(f"image path: {img_path}")
@@ -80,32 +92,29 @@ def main(args):
         img = cv2.imread(str(img_path), 1)
         cnts, bboxes_fit, bboxes, thresh = simple_segmenter(img)
 
-        first = True
-        image_biomass = 0
-        image_scale = {'pix': 1, 'um': 1}
+        image_scale, img = read_scale(img, bboxes[0], device="cpu")
+        print(f"Image scale: {image_scale}")
 
-        for c, rect_tilted, rect in zip(cnts, bboxes_fit, bboxes):
-            if first:
-                image_scale = read_scale(img, rect, device="cpu")
-                print(f"Image scale: {image_scale}")
-                first = False
-                continue
+        predicted = predict(model, img, device=cfg.DEVICE)
+        biomass, biomass_std, biomass_mean = calculate_mass(predicted, scale=image_scale)
 
-            # cnt_normalized, cnt_translated, center, shape_translated = prepare_contours(rect_tilted, rect, c)
-            # label_image = prepare_segmented_img(img, cnt_translated, shape_translated, rect)
-            # ratio, label_image = resize_pad(label_image, img_size=None, new_size=INPUT_IMAGE_SIZE)
-            # input_tensor = torch.from_numpy(label_image.astype(np.float32))
-            # input_tensor = input_tensor.view([1, 3, INPUT_IMAGE_SIZE, INPUT_IMAGE_SIZE])
-            #
-            # with torch.no_grad():
-            #     predicted = model(input_tensor).cpu()
-            #     predicted = predicted.view([4, 2])
-            #
-            #     mass = calculate_mass(predicted.numpy(), img_ratio=INPUT_IMAGE_SIZE / ratio, scale=image_scale)
-            #     image_biomass += mass
+        img = predicted["image"]
 
-        print(f"Image total mass: {image_biomass} ug\n")
-        cv2.imshow('segmented', cv2.resize(thresh, (0, 0), fx=0.5, fy=0.5))
+        print(f"Image total mass: {biomass} ug\n")
+        print("-" * 50)
+
+        info_dict = {"scale": (f"Scale: {image_scale['um']} um", (50, 50)),
+                     "number": (f"Animal number: {predicted['bboxes'].shape[0]}", (50, 100)),
+                     "mass": (f"Total biomass: {round(biomass, 5)} ug", (50, 150)),
+                     "mean": (f"Animal mass mean: {round(biomass_mean, 5)} ug", (50, 200)),
+                     "std": (f"Biomass std: {round(biomass_std, 5)} ug", (50, 250))}
+
+        for text, position in info_dict.values():
+            img = cv2.putText(img, text, position,
+                              cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
+
+        cv2.imwrite("../images/keypoint_rcnn_detection.jpg", img)
+        cv2.imshow('predicted', cv2.resize(img, (0, 0), fx=0.5, fy=0.5))
         cv2.waitKey(1000)
 
 

@@ -1,4 +1,5 @@
 from easyocr import Reader
+import cv2
 
 
 def change_to_um(text):
@@ -19,10 +20,10 @@ def read_scale(img, rect, device="cpu"):
     reader = Reader(['en'], gpu=True if device == "gpu" else False)
 
     x, y, w, h = rect
-    # img = cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
     result = reader.readtext(img,
                              slope_ths=0.01,
                              width_ths=0.7)
+
     text_threshold = 0.8
     scale_center = (round(x + w/2), round(y + h/2))
 
@@ -36,5 +37,9 @@ def read_scale(img, rect, device="cpu"):
     result = sorted(result, key=calc_dist, reverse=True)[0]
     scale_value = change_to_um(result[1])
 
+    img = cv2.rectangle(img.copy(), (x, y), (x + w, y + h), (0, 0, 255), 2)
+    img = cv2.putText(img, 'scale', (x, y), cv2.FONT_HERSHEY_SIMPLEX,
+                      1, (255, 0, 0), 2, cv2.LINE_AA)
+
     output = {"pix": w, "um": scale_value}
-    return output
+    return output, img
