@@ -7,4 +7,5 @@ crops/
 *.json
 *.pt
 *.pth
+*.csv
 !images/keypoint_rcnn_detection.jpg

@@ -28,7 +28,7 @@ def predict(model, img, device):
         img = cv2.rectangle(img.copy(), pt1, pt2, (0, 0, 255), 2)
 
         position = (int(bboxes[i][0]), int(bboxes[i][1]))
-        img = cv2.putText(img, cfg.INSTANCE_CATEGORY_NAMES[labels[i]],
+        img = cv2.putText(img, f"{cfg.INSTANCE_CATEGORY_NAMES[labels[i]]}{i}",
                           position, cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.7, color=(255, 0, 0), thickness=2)
 
         for kpt1, kpt2 in ((0, 1), (2, 3)):
