@@ -35,6 +35,7 @@ class KeypointsDataset(Dataset):
         bboxes, areas, keypoints, keypoints_vis, labels, iscrowd = [], [], [], [], [], []
         for i in range(objects_num):
             coco_elem = coco_annotation[i]
+
             x_min = coco_elem['bbox'][0]
             y_min = coco_elem['bbox'][1]
             x_max = x_min + coco_elem['bbox'][2]
@@ -88,6 +89,8 @@ class KeypointsDataset(Dataset):
 
         transform = alb.Compose([
             # alb.Affine(p=0.9),
+            alb.RandomRotate90(p=0.5),
+            alb.RandomRotate90(p=0.5),
             alb.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.2, always_apply=False, p=0.5),
             alb.OneOf(one_of, p=0.8),
             alb.OneOf(one_of, p=0.8),
@@ -105,7 +108,7 @@ def collate_function(batch):
     return tuple(zip(*batch))
 
 
-def load_data(images_dir, annotation_file="../Tardigrada-5.json",
+def load_data(images_dir, annotation_file="../Tardigrada-11.json",
               transform=False, shuffle=False):
     dataset = KeypointsDataset(images_dir=images_dir, annotation_file=annotation_file, transforms=transform)
     dataloader = DataLoader(dataset=dataset, collate_fn=collate_function,

@@ -85,12 +85,20 @@ def calculate_mass(predicted, scale, img_path):
 
 def main(args):
     args.output_dir.mkdir(exist_ok=True, parents=True)
-    images = args.input_dir.glob("*.jpg")
+    images_extensions = ("png", "tif", "jpg", "jpeg")
+
+    images_paths = []
+    for ext in images_extensions:
+        ext_paths = list(args.input_dir.glob(f"*.{ext}"))
+        images_paths.extend(ext_paths)
+
+    print(f"IMG PATHS: {images_paths}")
+
     # images = [Path("./images/krio5_OM_1.5_5.jpg")]
     model = keypoint_detector()
     model.load_state_dict(torch.load("keypoints_detector/checkpoints/keypoints_detector.pth"))
 
-    for img_path in images:
+    for img_path in images_paths:
         img = cv2.imread(str(img_path), 1)
         cnts, bboxes_fit, bboxes, thresh = simple_segmenter(img)
         image_scale, img = read_scale(img, bboxes[0], device="cpu")
@@ -98,25 +106,32 @@ def main(args):
         predicted = predict(model, img, device=cfg.DEVICE)
         results_df = calculate_mass(predicted, image_scale, img_path)
 
-        mass_total = results_df["biomass"].sum()
-        mass_mean = results_df["biomass"].mean()
-        mass_std = results_df["biomass"].std()
         img = predicted["image"]
 
-        print(f"image path: {img_path}\n"
-              f"Image scale: {image_scale}\n"
-              f"Image total mass: {mass_total} ug")
-        print("-" * 50)
+        if not results_df.empty:
+            mass_total = results_df["biomass"].sum()
+            mass_mean = results_df["biomass"].mean()
+            mass_std = results_df["biomass"].std()
 
-        info_dict = {"scale": (f"Scale: {image_scale['um']} um", (50, 50)),
-                     "number": (f"Animal number: {predicted['bboxes'].shape[0]}", (50, 100)),
-                     "mass": (f"Total biomass: {round(mass_total, 5)} ug", (50, 150)),
-                     "mean": (f"Animal mass mean: {round(mass_mean, 5)} ug", (50, 200)),
-                     "std": (f"Animal mass std: {round(mass_std, 5)} ug", (50, 250))}
+            print(f"image path: {img_path}\n"
+                  f"Image scale: {image_scale}\n"
+                  f"Image total mass: {mass_total} ug")
+            print("-" * 50)
 
-        for text, position in info_dict.values():
-            img = cv2.putText(img, text, position,
-                              cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
+            info_dict = {"scale": (f"Scale: {image_scale['um']} um", (50, 50)),
+                         "number": (f"Animal number: {predicted['bboxes'].shape[0]}", (50, 100)),
+                         "mass": (f"Total biomass: {round(mass_total, 5)} ug", (50, 150)),
+                         "mean": (f"Animal mass mean: {round(mass_mean, 5)} ug", (50, 200)),
+                         "std": (f"Animal mass std: {round(mass_std, 5)} ug", (50, 250))}
+
+            for text, position in info_dict.values():
+                img = cv2.putText(img, text, position,
+                                  cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
+
+        else:
+            print("-" * 50)
+            print(f"Mass calculation results empty for file: {str(img_path)}")
+            print("-" * 50)
 
         results_df.to_csv(args.output_dir / f"{img_path.stem}_results.csv")
         cv2.imwrite(str(args.output_dir / f"{img_path.stem}_results.jpg"), img)

@@ -25,7 +25,7 @@ def validate():
     return
 
 
-def train(device, checkpoint_save_interval=True, save_plots=True):
+def train(images_path, annotation_path, device, checkpoint_save_interval=True, save_plots=True):
     model = keypoint_detector(cfg.CLASSES_NUMBER, cfg.KEYPOINTS)
     model.to(device)
     optimizer = torch.optim.SGD(model.parameters(),
@@ -35,18 +35,22 @@ def train(device, checkpoint_save_interval=True, save_plots=True):
 
     scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=cfg.MILESTONES, gamma=cfg.GAMMA)
 
-    dataloader = load_data(images_dir="../images",
-                           annotation_file="../Tardigrada-5.json",
+    dataloader = load_data(images_dir=str(images_path),
+                           annotation_file=str(annotation_path),
                            transform=True)
 
-    losses = {"loss_total": [],
-              "loss_classifier": [],
-              "loss_box_reg": [],
-              "loss_keypoint": [],
-              "loss_objectness": [],
-              "loss_rpn_box_reg": []}
+    losses_names = ["loss_total",
+                    "loss_classifier",
+                    "loss_box_reg",
+                    "loss_keypoint",
+                    "loss_objectness",
+                    "loss_rpn_box_reg"]
+
+    losses = {key: [] for key in losses_names}
 
     for epoch in range(cfg.EPOCHS):
+        epoch_losses = {key: [] for key in losses_names}
+
         for i, (img, targets) in enumerate(dataloader):
             img = [img.to(device) for img in img]
             targets = [{k: v.to(device) for k, v in target.items()} for target in targets]
@@ -62,10 +66,13 @@ def train(device, checkpoint_save_interval=True, save_plots=True):
             # TODO: Create validate function
             scheduler.step()
 
-            for loss_key in loss_dict.keys():
-                losses[loss_key].append(loss_dict[loss_key].item())
+            for loss_key in losses_names[1:]:
+                epoch_losses[loss_key].append(loss_dict[loss_key].item())
 
-            losses["loss_total"].append(loss_total.item())
+            epoch_losses["loss_total"].append(loss_total.item())
+
+        for loss_key in losses_names:
+            losses[loss_key].append((np.asarray(epoch_losses[loss_key]).mean()))
 
         if checkpoint_save_interval:
             if epoch % cfg.CHECKPOINT_SAVE_INTERVAL == 0:
@@ -96,4 +103,6 @@ def train(device, checkpoint_save_interval=True, save_plots=True):
 
 
 if __name__ == '__main__':
-    train(cfg.DEVICE, checkpoint_save_interval=False)
+    images_path = Path("../images")
+    annotation_path = Path("../Tardigrada-14.json")
+    train(images_path, annotation_path, cfg.DEVICE, checkpoint_save_interval=False)
