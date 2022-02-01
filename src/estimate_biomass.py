@@ -3,84 +3,140 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import pandas as pd
 import torch
 
-from key_points_detector.config import INPUT_IMAGE_SIZE
-from key_points_detector.model import AlexNet
+import keypoints_detector.config as cfg
+from keypoints_detector.model import keypoint_detector
+from keypoints_detector.predict import predict
 from scale_detector.scale_detector import read_scale
-from segmenter.model import simple_segmenter
-from utils import prepare_segmented_img, prepare_contours, resize_pad
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--input_dir", type=Path, default="./images/",
                         help="Input images directory.")
+    parser.add_argument("-o", "--output_dir", type=Path, default="../results/",
+                        help="Outputs directory.")
 
     return parser.parse_args()
 
 
-def calculate_mass(points, scale, img_ratio=1, echiniscus=False):
-    # If the mass of the species Echiniscus is estimated, use different equation
-    # TODO: pass nn input image scale factors and multiply with length and width
-    head, ass, right, left = points
-    length_pix = np.linalg.norm(head - ass) * img_ratio
-    width_pix = np.linalg.norm(right - left) * img_ratio
-    scale_ratio = scale["pix"] * scale["um"]
-    length = scale_ratio / length_pix
-    width = scale_ratio / width_pix
+def filter_cnts(cnts):
+    cnts_filtered = []
+    bboxes_fit = []
+    bboxes = []
+    for cnt in cnts:
+        if cv2.contourArea(cnt) < 1000:
+            continue
+        rect_tilted = cv2.minAreaRect(cnt)
+        if 0.5 < rect_tilted[1][0] / rect_tilted[1][1] < 2:
+            continue
+        rect = cv2.boundingRect(cnt)
+        bboxes.append(rect)
+        cnts_filtered.append(cnt)
+        bboxes_fit.append(rect_tilted)
 
-    R = length / width
+    return cnts_filtered, bboxes_fit, bboxes
+
+
+def simple_segmenter(img):
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    ret, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
+    cnts, hier = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+    cnts, bboxes_fit, bboxes = filter_cnts(cnts)
+
+    return cnts, bboxes_fit, bboxes, thresh
+
+
+def calculate_mass(predicted, scale, img_path):
+    scale_ratio = scale["um"] / scale["pix"]
     density = 1.04
+    results = []
 
-    if echiniscus:
-        mass = (1 / 12) * length * np.pi * (length / R) ** 0.5 * density * 10 ** -6  # [ug]
-    else:
-        mass = length * np.pi * (length / (2 * R)) ** 0.5 * density * 10 ** -6  # [ug]
+    for i, points in enumerate(predicted["keypoints"]):
+        points = points.astype(np.uint64)
+        head, ass, right, left = points
+        length = np.sqrt(np.sum((head - ass) ** 2)) * scale_ratio
+        width = np.sqrt(np.sum((left - right) ** 2)) * scale_ratio
+        class_name = cfg.INSTANCE_CATEGORY_NAMES[predicted["labels"][i]]
 
-    print(f"length / width: {R}, mass: {mass}")
-    return mass
+        if length and width != np.nan:
+            R = length / width
+
+            # If the mass of the species Echiniscus is estimated, use different equation
+            if class_name == 'echiniscus':
+                mass = (1 / 12) * length * np.pi * (length / R) ** 2 * density * 10 ** -6  # [ug]
+            else:
+                mass = length * np.pi * (length / (2 * R)) ** 2 * density * 10 ** -6  # [ug]
+
+            info = {"img_path": img_path,
+                    "id": i,
+                    "class": class_name,
+                    "length": length,
+                    "width": width,
+                    "biomass": mass}
+
+            # print(info)
+            results.append(info)
+
+    return pd.DataFrame(results)
 
 
 def main(args):
-    images = args.input_dir.glob("*.jpg")
+    args.output_dir.mkdir(exist_ok=True, parents=True)
+    images_extensions = ("png", "tif", "jpg", "jpeg")
 
-    model = AlexNet()
-    model.load_state_dict(torch.load("./key_points_detector/checkpoints/pose_net.pth"))
+    images_paths = []
+    for ext in images_extensions:
+        ext_paths = list(args.input_dir.glob(f"*.{ext}"))
+        images_paths.extend(ext_paths)
 
-    for img_path in images:
-        print(f"image path: {img_path}")
+    print(f"IMG PATHS: {images_paths}")
+
+    # images = [Path("./images/krio5_OM_1.5_5.jpg")]
+    model = keypoint_detector()
+    model.load_state_dict(torch.load("keypoints_detector/checkpoints/keypoints_detector.pth"))
+
+    for img_path in images_paths:
         img = cv2.imread(str(img_path), 1)
-
         cnts, bboxes_fit, bboxes, thresh = simple_segmenter(img)
-        first = True
+        image_scale, img = read_scale(img, bboxes[0], device="cpu")
 
-        image_biomass = 0
-        image_scale = {'pix': 1, 'um': 1}
+        predicted = predict(model, img, device=cfg.DEVICE)
+        results_df = calculate_mass(predicted, image_scale, img_path)
 
-        for c, rect_tilted, rect in zip(cnts, bboxes_fit, bboxes):
-            if first:
-                image_scale = read_scale(img, rect, device="cpu")
-                print(f"Image scale: {image_scale}")
-                first = False
-                continue
+        img = predicted["image"]
 
-            cnt_normalized, cnt_translated, center, shape_translated = prepare_contours(rect_tilted, rect, c)
-            label_image = prepare_segmented_img(img, cnt_translated, shape_translated, rect)
-            ratio, label_image = resize_pad(label_image, img_size=None, new_size=INPUT_IMAGE_SIZE)
-            input_tensor = torch.from_numpy(label_image.astype(np.float32))
-            input_tensor = input_tensor.view([1, 3, INPUT_IMAGE_SIZE, INPUT_IMAGE_SIZE])
+        if not results_df.empty:
+            mass_total = results_df["biomass"].sum()
+            mass_mean = results_df["biomass"].mean()
+            mass_std = results_df["biomass"].std()
 
-            with torch.no_grad():
-                predicted = model(input_tensor).cpu()
-                predicted = predicted.view([4, 2])
+            print(f"image path: {img_path}\n"
+                  f"Image scale: {image_scale}\n"
+                  f"Image total mass: {mass_total} ug")
+            print("-" * 50)
 
-                mass = calculate_mass(predicted.numpy(), img_ratio=INPUT_IMAGE_SIZE / ratio, scale=image_scale)
-                image_biomass += mass
+            info_dict = {"scale": (f"Scale: {image_scale['um']} um", (50, 50)),
+                         "number": (f"Animal number: {predicted['bboxes'].shape[0]}", (50, 100)),
+                         "mass": (f"Total biomass: {round(mass_total, 5)} ug", (50, 150)),
+                         "mean": (f"Animal mass mean: {round(mass_mean, 5)} ug", (50, 200)),
+                         "std": (f"Animal mass std: {round(mass_std, 5)} ug", (50, 250))}
 
-        print(f"Image total mass: {image_biomass} ug\n")
-        cv2.imshow('segmented', cv2.resize(thresh, (0, 0), fx=0.5, fy=0.5))
-        cv2.waitKey(1000)
+            for text, position in info_dict.values():
+                img = cv2.putText(img, text, position,
+                                  cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
+
+        else:
+            print("-" * 50)
+            print(f"Mass calculation results empty for file: {str(img_path)}")
+            print("-" * 50)
+
+        results_df.to_csv(args.output_dir / f"{img_path.stem}_results.csv")
+        cv2.imwrite(str(args.output_dir / f"{img_path.stem}_results.jpg"), img)
+        cv2.imshow('predicted', cv2.resize(img, (0, 0), fx=0.5, fy=0.5))
+        cv2.waitKey(2500)
 
 
 if __name__ == '__main__':

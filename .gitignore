@@ -1,9 +1,11 @@
 __pycache__/
 .idea/
-images/
+src/images/
 crops/
 *.jpg
 *.png
 *.json
 *.pt
 *.pth
+*.csv
+!images/keypoint_rcnn_detection.jpg
