@@ -19,6 +19,7 @@ class KeypointsDataset(Dataset):
         self.coco = COCO(annotation_file)
         self.ids = list(sorted(self.coco.imgs.keys()))
         self.transforms = transforms
+        self.points_num = 7
 
     def __getitem__(self, index):
         coco = self.coco
@@ -52,11 +53,11 @@ class KeypointsDataset(Dataset):
             iscrowd.append(coco_elem["iscrowd"])
 
         if self.transforms:
-            keypoints = np.asarray(keypoints).reshape((-1, 4, 3))
-            visibility = keypoints[:, :, 2].reshape((-1, 4, 1))
+            keypoints = np.asarray(keypoints).reshape((-1, self.points_num, 3))
+            visibility = keypoints[:, :, 2].reshape((-1, self.points_num, 1))
             keypoints_no_vis = keypoints[:, :, :2].reshape((-1, 2))
             transformed = self.augment(img, key_points=keypoints_no_vis, labels=labels, bboxes=bboxes)
-            keypoints = np.asarray(transformed["keypoints"]).reshape((-1, 4, 2))
+            keypoints = np.asarray(transformed["keypoints"]).reshape((-1, self.points_num, 2))
             keypoints = np.concatenate((keypoints, visibility), axis=2)
             bboxes = np.asarray(transformed['bboxes'])
             img = transformed["image"]
@@ -108,8 +109,8 @@ def collate_function(batch):
     return tuple(zip(*batch))
 
 
-def load_data(images_dir, annotation_file="../Tardigrada-11.json",
-              transform=False, shuffle=False):
+def load_data(images_dir, annotation_file="../Tardigrada-14.json",
+              transform=True, shuffle=False):
     dataset = KeypointsDataset(images_dir=images_dir, annotation_file=annotation_file, transforms=transform)
     dataloader = DataLoader(dataset=dataset, collate_fn=collate_function,
                             batch_size=cfg.BATCH_SIZE, shuffle=shuffle, num_workers=cfg.NUM_WORKERS)

@@ -1,5 +1,5 @@
-from easyocr import Reader
 import cv2
+from easyocr import Reader
 
 
 def change_to_um(text):
@@ -12,6 +12,8 @@ def change_to_um(text):
     text = text.strip()
     text = "".join(text.split())
     text = text.replace(",", ".")
+
+    # TODO: Check string length and return None if scale value is wrongly detected
 
     value, unit = float(text[:-2]), text[-2:]
     value /= scales[unit]
@@ -38,7 +40,7 @@ def read_scale(img, rect, device="cpu"):
         center_y = abs(p1[1] - p4[1]) / 2 + p1[1]
         return (abs(scale_center[0] - center_x) ** 2 + abs(scale_center[1] - center_y) ** 2) ** 0.5
 
-    result = filter(lambda res: res[2] > text_threshold, result)
+    result = filter(lambda res: res[2] >= text_threshold, result)
     result = sorted(result, key=calc_dist, reverse=True)[0]
     scale_value = change_to_um(result[1])
 

@@ -135,7 +135,7 @@ def main(args):
 
         results_df.to_csv(args.output_dir / f"{img_path.stem}_results.csv")
         cv2.imwrite(str(args.output_dir / f"{img_path.stem}_results.jpg"), img)
-        cv2.imshow('predicted', cv2.resize(img, (0, 0), fx=0.5, fy=0.5))
+        cv2.imshow('predicted', cv2.resize(img, (0, 0), fx=0.6, fy=0.6))
         cv2.waitKey(2500)
 
 

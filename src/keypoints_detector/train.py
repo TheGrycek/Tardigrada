@@ -1,6 +1,7 @@
 import random
 from pathlib import Path
 
+import matplotlib.pyplot as plt  # TODO: matplotlib must be imported after torchvision model to avoid SIGSEGV error!
 import numpy as np
 import torch
 import torch.optim.lr_scheduler as lr_scheduler
@@ -8,8 +9,6 @@ import torch.optim.lr_scheduler as lr_scheduler
 import config as cfg
 from dataset import load_data
 from model import keypoint_detector
-
-import matplotlib.pyplot as plt  # TODO: matplotlib must be imported after torchvision model to avoid SIGSEGV error!
 
 seed = 123
 torch.manual_seed(seed)
