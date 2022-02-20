@@ -8,7 +8,7 @@ import numpy as np
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-i", "--json_path", default="./coco-jakub.json", type=Path,
+    parser.add_argument("-i", "--json_path", default="./Annotacja_1.json", type=Path,
                         help="Path to the json annotation file")
     parser.add_argument("-n", "--keypoints_num", default=7, type=int,
                         help="Number of keypoints for an instance")
@@ -22,7 +22,7 @@ def print_info(info_type, annotation, images, categories, keypoints_num=None, wa
            f"{'-' * 30}"
 
     if info_type == "error":
-        info_err = f"\nWRONG KEYPOINTS NUMBER!" \
+        info_err = f"\nWRONG KEYPOINTS NUMBER!\n" \
                    f"KEYPOINTS NUMBER: {keypoints_num}\n"
 
         logging.error(info_err + info)

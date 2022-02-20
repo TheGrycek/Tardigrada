@@ -1,7 +1,6 @@
 import random
 from pathlib import Path
 
-import matplotlib.pyplot as plt  # TODO: matplotlib must be imported after torchvision model to avoid SIGSEGV error!
 import numpy as np
 import torch
 import torch.optim.lr_scheduler as lr_scheduler
@@ -9,6 +8,8 @@ import torch.optim.lr_scheduler as lr_scheduler
 import config as cfg
 from dataset import load_data
 from model import keypoint_detector
+
+import matplotlib.pyplot as plt  # TODO: matplotlib must be imported after torchvision model to avoid SIGSEGV error!
 
 seed = 123
 torch.manual_seed(seed)
@@ -103,5 +104,5 @@ def train(images_path, annotation_path, device, checkpoint_save_interval=True, s
 
 if __name__ == '__main__':
     images_path = Path("../images")
-    annotation_path = Path("../Tardigrada-14.json")
+    annotation_path = Path("../Annotacja_1.json")
     train(images_path, annotation_path, cfg.DEVICE, checkpoint_save_interval=False)
