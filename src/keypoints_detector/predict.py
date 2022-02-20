@@ -21,7 +21,7 @@ def predict(model, img, device):
     grouped_keypoints = np.round(keypoints, 0)[:, :, :2]
 
     for i in range(len(bboxes)):
-        bbox = bboxes[i]
+        bbox, points = bboxes[i], grouped_keypoints[i]
         pt1 = tuple(bbox[:2].astype(np.uint16))
         pt2 = tuple(bbox[2:].astype(np.uint16))
 
@@ -31,13 +31,15 @@ def predict(model, img, device):
         img = cv2.putText(img, f"{cfg.INSTANCE_CATEGORY_NAMES[labels[i]]}{i}",
                           position, cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.7, color=(255, 0, 0), thickness=2)
 
-        for kpt1, kpt2 in ((0, 1), (2, 3)):
-            img = cv2.line(img, tuple(grouped_keypoints[i][kpt1]), tuple(grouped_keypoints[i][kpt2]),
-                           color=(255, 0, 0), thickness=2)
+        img = cv2.line(img, tuple(points[-2]), tuple(points[-1]), color=(255, 0, 0), thickness=1)
+
+        for ind in (0, 4):
+            img = cv2.circle(img, center=tuple(points[ind].astype(np.int32)),
+                             radius=2, color=(0, 255, 0), thickness=2)
 
         for j in range(len(keypoints[i])):
             img = cv2.circle(img, center=(round(keypoints[i][j][0]), round(keypoints[i][j][1])),
-                             radius=2, color=(255, 0, 255), thickness=2)
+                             radius=2, color=(255, 0, 255), thickness=1)
 
     output = {"image": img,
               "keypoints": grouped_keypoints,
@@ -50,7 +52,7 @@ def predict(model, img, device):
 
 def show_prediction(img):
     model = keypoint_detector()
-    model.load_state_dict(torch.load("checkpoints/keypoints_detector2000.pth"))
+    model.load_state_dict(torch.load("keypoints_detector/checkpoints/keypoints_detector.pth"))
     prediction = predict(model, img, cfg.DEVICE)
     cv2.imwrite("keypoint_rcnn_detection.jpg", prediction["image"])
 

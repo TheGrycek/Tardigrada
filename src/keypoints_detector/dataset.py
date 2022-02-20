@@ -19,6 +19,7 @@ class KeypointsDataset(Dataset):
         self.coco = COCO(annotation_file)
         self.ids = list(sorted(self.coco.imgs.keys()))
         self.transforms = transforms
+        self.points_num = 7
 
     def __getitem__(self, index):
         coco = self.coco
@@ -35,7 +36,6 @@ class KeypointsDataset(Dataset):
         bboxes, areas, keypoints, keypoints_vis, labels, iscrowd = [], [], [], [], [], []
         for i in range(objects_num):
             coco_elem = coco_annotation[i]
-
             x_min = coco_elem['bbox'][0]
             y_min = coco_elem['bbox'][1]
             x_max = x_min + coco_elem['bbox'][2]
@@ -52,11 +52,11 @@ class KeypointsDataset(Dataset):
             iscrowd.append(coco_elem["iscrowd"])
 
         if self.transforms:
-            keypoints = np.asarray(keypoints).reshape((-1, 4, 3))
-            visibility = keypoints[:, :, 2].reshape((-1, 4, 1))
+            keypoints = np.asarray(keypoints).reshape((-1, self.points_num, 3))
+            visibility = keypoints[:, :, 2].reshape((-1, self.points_num, 1))
             keypoints_no_vis = keypoints[:, :, :2].reshape((-1, 2))
             transformed = self.augment(img, key_points=keypoints_no_vis, labels=labels, bboxes=bboxes)
-            keypoints = np.asarray(transformed["keypoints"]).reshape((-1, 4, 2))
+            keypoints = np.asarray(transformed["keypoints"]).reshape((-1, self.points_num, 2))
             keypoints = np.concatenate((keypoints, visibility), axis=2)
             bboxes = np.asarray(transformed['bboxes'])
             img = transformed["image"]
@@ -67,7 +67,7 @@ class KeypointsDataset(Dataset):
                       "labels": torch.as_tensor(labels, dtype=torch.int64),
                       "area": torch.as_tensor(areas, dtype=torch.float32),
                       "iscrowd": torch.as_tensor(iscrowd, dtype=torch.int64),
-                      "keypoints": torch.as_tensor(keypoints, dtype=torch.float32).view(-1, 4, 3)}
+                      "keypoints": torch.as_tensor(keypoints, dtype=torch.float32).view(-1, self.points_num, 3)}
 
         return img, annotation
 
@@ -76,7 +76,6 @@ class KeypointsDataset(Dataset):
 
     @staticmethod
     def augment(img, key_points, bboxes, labels):
-
         one_of = [alb.ImageCompression(p=0.8),
                   alb.Blur(blur_limit=5, p=0.8),
                   alb.GaussNoise(p=0.8),
@@ -108,8 +107,8 @@ def collate_function(batch):
     return tuple(zip(*batch))
 
 
-def load_data(images_dir, annotation_file="../Tardigrada-11.json",
-              transform=False, shuffle=False):
+def load_data(images_dir, annotation_file="../Annotacja_1.json",
+              transform=True, shuffle=False):
     dataset = KeypointsDataset(images_dir=images_dir, annotation_file=annotation_file, transforms=transform)
     dataloader = DataLoader(dataset=dataset, collate_fn=collate_function,
                             batch_size=cfg.BATCH_SIZE, shuffle=shuffle, num_workers=cfg.NUM_WORKERS)

@@ -104,5 +104,5 @@ def train(images_path, annotation_path, device, checkpoint_save_interval=True, s
 
 if __name__ == '__main__':
     images_path = Path("../images")
-    annotation_path = Path("../Tardigrada-14.json")
+    annotation_path = Path("../Annotacja_1.json")
     train(images_path, annotation_path, cfg.DEVICE, checkpoint_save_interval=False)
