@@ -1,5 +1,6 @@
 import random
 from pathlib import Path
+from time import time, strftime, gmtime
 
 import numpy as np
 import torch
@@ -10,6 +11,7 @@ from dataset import load_data
 from model import keypoint_detector
 
 import matplotlib.pyplot as plt  # TODO: matplotlib must be imported after torchvision model to avoid SIGSEGV error!
+
 
 seed = 123
 torch.manual_seed(seed)
@@ -35,9 +37,9 @@ def train(images_path, annotation_path, device, checkpoint_save_interval=True, s
 
     scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=cfg.MILESTONES, gamma=cfg.GAMMA)
 
-    dataloader = load_data(images_dir=str(images_path),
-                           annotation_file=str(annotation_path),
-                           transform=True)
+    dataloaders = load_data(images_dir=str(images_path),
+                            annotation_file=str(annotation_path),
+                            transform=True, val_ratio=cfg.VAL_RATIO, test_ratio=cfg.TEST_RATIO)
 
     losses_names = ["loss_total",
                     "loss_classifier",
@@ -48,14 +50,14 @@ def train(images_path, annotation_path, device, checkpoint_save_interval=True, s
 
     losses = {key: [] for key in losses_names}
 
+    start = time()
     for epoch in range(cfg.EPOCHS):
         epoch_losses = {key: [] for key in losses_names}
-
-        for i, (img, targets) in enumerate(dataloader):
-            img = [img.to(device) for img in img]
+        for i, (imgs, targets) in enumerate(dataloaders["train"]):
+            img_batch = [img.to(device) for img in imgs]
             targets = [{k: v.to(device) for k, v in target.items()} for target in targets]
 
-            loss_dict = model(img, targets)
+            loss_dict = model(img_batch, targets)
             loss_total = sum(loss for loss in loss_dict.values())
 
             optimizer.zero_grad()
@@ -78,10 +80,11 @@ def train(images_path, annotation_path, device, checkpoint_save_interval=True, s
             if epoch % cfg.CHECKPOINT_SAVE_INTERVAL == 0:
                 torch.save(model.state_dict(), f"checkpoints/segmenter_checkpoint{epoch}.pth")
 
-        if (epoch + 1) % 10 == 0:
+        if (epoch + 1) % 5 == 0:
             print(f"epoch: {epoch + 1}, loss={loss_total.item()}:.4f")
 
     torch.save(model.state_dict(), f"checkpoints/keypoints_detector.pth")
+    print(f"TOTAL TRAINING TIME: {strftime('%H:%M:%S', gmtime(time() - start))}")
 
     if save_plots:
         out_path = Path("./training_results")
@@ -103,6 +106,6 @@ def train(images_path, annotation_path, device, checkpoint_save_interval=True, s
 
 
 if __name__ == '__main__':
-    images_path = Path("../images")
-    annotation_path = Path("../Annotacja_1.json")
+    images_path = Path("../images/train")
+    annotation_path = Path("../coco-1652095945.2305472.json")
     train(images_path, annotation_path, cfg.DEVICE, checkpoint_save_interval=False)

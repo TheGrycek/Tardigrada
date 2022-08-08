@@ -52,7 +52,7 @@ def predict(model, img, device):
 
 def show_prediction(img):
     model = keypoint_detector()
-    model.load_state_dict(torch.load("keypoints_detector/checkpoints/keypoints_detector.pth"))
+    model.load_state_dict(torch.load("keypoints_detector/checkpoints/keypoints_detector_old.pth"))
     prediction = predict(model, img, cfg.DEVICE)
     cv2.imwrite("keypoint_rcnn_detection.jpg", prediction["image"])
 

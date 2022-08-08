@@ -9,3 +9,5 @@ python-bidi
 PyYAML
 easyocr==1.4.1
 pycocotools
+pandas
+ujson

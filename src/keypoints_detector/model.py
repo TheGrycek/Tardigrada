@@ -1,7 +1,7 @@
 from torchvision.models.detection import keypointrcnn_resnet50_fpn
 
 
-def keypoint_detector(num_classes=3, num_keypoints=7):
+def keypoint_detector(num_classes=4, num_keypoints=7):
     model = keypointrcnn_resnet50_fpn(pretrained=False,
                                       pretrained_backbone=True,
                                       num_classes=num_classes,

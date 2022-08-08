@@ -8,6 +8,7 @@ import torch
 import torchvision.transforms.functional as F
 from pycocotools.coco import COCO
 from torch.utils.data import Dataset, DataLoader
+from config import KEYPOINTS
 
 import config as cfg
 
@@ -19,7 +20,7 @@ class KeypointsDataset(Dataset):
         self.coco = COCO(annotation_file)
         self.ids = list(sorted(self.coco.imgs.keys()))
         self.transforms = transforms
-        self.points_num = 7
+        self.points_num = KEYPOINTS
 
     def __getitem__(self, index):
         coco = self.coco
@@ -93,7 +94,7 @@ class KeypointsDataset(Dataset):
             alb.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.2, always_apply=False, p=0.5),
             alb.OneOf(one_of, p=0.8),
             alb.OneOf(one_of, p=0.8),
-            # alb.OneOf(one_of2, p=0.5),
+            alb.OneOf(one_of2, p=0.5),
             # alb.normalize(mean=[], std=[], max_pixel_value=255)
             ],
             keypoint_params=alb.KeypointParams(format='xy', remove_invisible=False),
@@ -107,13 +108,25 @@ def collate_function(batch):
     return tuple(zip(*batch))
 
 
-def load_data(images_dir, annotation_file="../Annotacja_1.json",
-              transform=True, shuffle=False):
-    dataset = KeypointsDataset(images_dir=images_dir, annotation_file=annotation_file, transforms=transform)
-    dataloader = DataLoader(dataset=dataset, collate_fn=collate_function,
-                            batch_size=cfg.BATCH_SIZE, shuffle=shuffle, num_workers=cfg.NUM_WORKERS)
+def load_data(images_dir, annotation_file="../coco-1652095945.2305472.json",
+              transform=True, shuffle=False, val_ratio=cfg.VAL_RATIO, test_ratio=cfg.TEST_RATIO):
+    dataset = KeypointsDataset(images_dir=images_dir, annotation_file=annotation_file, transforms=False)
+    total_cnt = dataset.__len__()
+    val_cnt = int(val_ratio * total_cnt)
+    test_cnt = int(test_ratio * total_cnt)
+    train_cnt = total_cnt - val_cnt - test_cnt
 
-    return dataloader
+    print(f"\nTRAINING IMAGES NUMBER: {train_cnt}\n")
+    dataset_train, dataset_val, dataset_test = torch.utils.data.random_split(dataset, (train_cnt, val_cnt, test_cnt))
+    dataset_train.transforms = transform
+
+    dataloaders = {
+        name: DataLoader(dataset=dataset_, collate_fn=collate_function, batch_size=cfg.BATCH_SIZE,
+                         shuffle=shuffle, num_workers=cfg.NUM_WORKERS)
+        for name, dataset_ in zip(["train", "val", "test"], [dataset_train, dataset_val, dataset_test])
+    }
+
+    return dataloaders
 
 
 if __name__ == '__main__':

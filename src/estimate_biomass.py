@@ -14,7 +14,7 @@ from scale_detector.scale_detector import read_scale
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-i", "--input_dir", type=Path, default="./images/",
+    parser.add_argument("-i", "--input_dir", type=Path, default="./images/test",
                         help="Input images directory.")
     parser.add_argument("-o", "--output_dir", type=Path, default="../results/",
                         help="Outputs directory.")
@@ -97,14 +97,13 @@ def calc_dimensions(length_pts, width_pts, scale_ratio):
 
 
 def calculate_mass(predicted, scale, img_path):
-    keypoints_num = 7
     scale_ratio = scale["um"] / scale["pix"]
     density = 1.04
     results = []
     lengths_points = []
 
     for i, (bbox, points) in enumerate(zip(predicted["bboxes"], predicted["keypoints"])):
-        length_pts = fit_curve(bbox, points, keypoints_num)
+        length_pts = fit_curve(bbox, points, cfg.KEYPOINTS)
         lengths_points.append(length_pts)
         length, width = calc_dimensions(length_pts, points[-2:], scale_ratio)
 
@@ -143,9 +142,9 @@ def main(args):
 
     print(f"IMG PATHS: {images_paths}")
 
-    # images = [Path("./images/krio5_OM_1.5_5.jpg")]
+    # images = [Path("./images/train/krio5_OM_1.5_5.jpg")]
     model = keypoint_detector()
-    model.load_state_dict(torch.load("keypoints_detector/checkpoints/keypoints_detector.pth"))
+    model.load_state_dict(torch.load("keypoints_detector/checkpoints/keypoints_detector_old.pth"))
 
     for img_path in images_paths:
         try:
@@ -188,7 +187,7 @@ def main(args):
 
             results_df.to_csv(args.output_dir / f"{img_path.stem}_results.csv")
             cv2.imwrite(str(args.output_dir / f"{img_path.stem}_results.jpg"), img)
-            cv2.imshow('predicted', cv2.resize(img, (0, 0), fx=0.6, fy=0.6))
+            cv2.imshow('predicted', cv2.resize(img, (700, 500)))
             cv2.waitKey(2500)
 
         except Exception as e:
