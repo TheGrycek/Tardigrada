@@ -8,7 +8,7 @@ import numpy as np
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-i", "--json_path", default="./Annotacja_1.json", type=Path,
+    parser.add_argument("-i", "--json_path", default="./coco-1659778596.546996.json", type=Path,
                         help="Path to the json annotation file")
     parser.add_argument("-n", "--keypoints_num", default=7, type=int,
                         help="Number of keypoints for an instance")

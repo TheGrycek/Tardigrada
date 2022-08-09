@@ -22,33 +22,6 @@ def parse_args():
     return parser.parse_args()
 
 
-def filter_cnts(cnts):
-    cnts_filtered = []
-    bboxes_fit = []
-    bboxes = []
-    for cnt in cnts:
-        if cv2.contourArea(cnt) < 1000:
-            continue
-        rect_tilted = cv2.minAreaRect(cnt)
-        if 0.5 < rect_tilted[1][0] / rect_tilted[1][1] < 2:
-            continue
-        rect = cv2.boundingRect(cnt)
-        bboxes.append(rect)
-        cnts_filtered.append(cnt)
-        bboxes_fit.append(rect_tilted)
-
-    return cnts_filtered, bboxes_fit, bboxes
-
-
-def simple_segmenter(img):
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    ret, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
-    cnts, hier = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
-    cnts, bboxes_fit, bboxes = filter_cnts(cnts)
-
-    return cnts, bboxes_fit, bboxes, thresh
-
-
 def calc_dist(pt1, pt2):
     return np.sqrt(np.sum(np.square(pt1 - pt2)))
 
@@ -149,9 +122,7 @@ def main(args):
     for img_path in images_paths:
         try:
             img = cv2.imread(str(img_path), 1)
-            cnts, bboxes_fit, bboxes, thresh = simple_segmenter(img)
-
-            image_scale, img = read_scale(img, bboxes, device="cpu")
+            image_scale, img = read_scale(img, device="cpu")
             predicted = predict(model, img, device=cfg.DEVICE)
             results_df, lengths_points = calculate_mass(predicted, image_scale, img_path)
 
@@ -187,7 +158,7 @@ def main(args):
 
             results_df.to_csv(args.output_dir / f"{img_path.stem}_results.csv")
             cv2.imwrite(str(args.output_dir / f"{img_path.stem}_results.jpg"), img)
-            cv2.imshow('predicted', cv2.resize(img, (700, 500)))
+            cv2.imshow('predicted', cv2.resize(img, (1400, 700)))
             cv2.waitKey(2500)
 
         except Exception as e:

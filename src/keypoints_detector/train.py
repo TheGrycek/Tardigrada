@@ -107,5 +107,5 @@ def train(images_path, annotation_path, device, checkpoint_save_interval=True, s
 
 if __name__ == '__main__':
     images_path = Path("../images/train")
-    annotation_path = Path("../coco-1652095945.2305472.json")
+    annotation_path = Path("../coco-1659778596.546996.json")
     train(images_path, annotation_path, cfg.DEVICE, checkpoint_save_interval=False)

@@ -95,7 +95,7 @@ class KeypointsDataset(Dataset):
             alb.OneOf(one_of, p=0.8),
             alb.OneOf(one_of, p=0.8),
             alb.OneOf(one_of2, p=0.5),
-            # alb.normalize(mean=[], std=[], max_pixel_value=255)
+            alb.Normalize(mean=[0, 0, 0], std=[1, 1, 1], max_pixel_value=255)
             ],
             keypoint_params=alb.KeypointParams(format='xy', remove_invisible=False),
             bbox_params=alb.BboxParams(format='pascal_voc', min_area=100, label_fields=['bboxes_labels'])
@@ -108,7 +108,7 @@ def collate_function(batch):
     return tuple(zip(*batch))
 
 
-def load_data(images_dir, annotation_file="../coco-1652095945.2305472.json",
+def load_data(images_dir, annotation_file="../coco-1659778596.546996.json",
               transform=True, shuffle=False, val_ratio=cfg.VAL_RATIO, test_ratio=cfg.TEST_RATIO):
     dataset = KeypointsDataset(images_dir=images_dir, annotation_file=annotation_file, transforms=False)
     total_cnt = dataset.__len__()
@@ -129,11 +129,30 @@ def load_data(images_dir, annotation_file="../coco-1652095945.2305472.json",
     return dataloaders
 
 
-if __name__ == '__main__':
-    random.seed(1)
-    dataloader = load_data(images_dir="../images")
+def get_normalization_params(images_dir="../images/train", annotation_file="../coco-1659778596.546996.json"):
+    dataset = KeypointsDataset(images_dir=images_dir, annotation_file=annotation_file, transforms=False)
+    dataloader = DataLoader(dataset=dataset, batch_size=cfg.BATCH_SIZE,
+                            shuffle=False)
+    mean, std, imgs_num = 0, 0, 0
 
-    for i in range(100):
+    for imgs, _ in dataloader:
+        imgs_cnt = imgs.size(0)
+        imgs = imgs.view(imgs_cnt, imgs.size(1), -1)
+        mean += imgs.mean(2).sum(0)
+        std += imgs.std(2).sum(0)
+        imgs_num += imgs_cnt
+
+    mean /= imgs_num
+    std /= imgs_num
+
+    return {"mean": mean.tolist(), "std": std.tolist()}
+
+
+def check_examples():
+    random.seed(1)
+    dataloader = load_data(images_dir="../images/train")["train"]
+
+    for i in range(20):
         for img, annotation in dataloader:
             img = (img[0].numpy() * 255).astype(np.uint8)
             img = np.swapaxes(img, 0, 1)
@@ -149,3 +168,9 @@ if __name__ == '__main__':
 
             cv2.imshow("img", cv2.resize(img, (0, 0), fx=0.5, fy=0.5))
             cv2.waitKey(1500)
+
+
+if __name__ == '__main__':
+    norm_params = get_normalization_params(annotation_file="../coco-1659778596.546996.json")
+    print(f"MEAN:{norm_params['mean']}\nSTD:{norm_params['std']}\n")
+    check_examples()
