@@ -31,15 +31,15 @@ def predict(model, img, device):
         img = cv2.putText(img, f"{cfg.INSTANCE_CATEGORY_NAMES[labels[i]]}{i}",
                           position, cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.7, color=(255, 0, 0), thickness=2)
 
-        img = cv2.line(img, tuple(points[-2]), tuple(points[-1]), color=(255, 0, 0), thickness=1)
+        img = cv2.line(img, tuple(points[-2]), tuple(points[-1]), color=(0, 255, 255), thickness=2)
 
         for ind in (0, 4):
             img = cv2.circle(img, center=tuple(points[ind].astype(np.int32)),
-                             radius=2, color=(0, 255, 0), thickness=2)
+                             radius=4, color=(0, 255, 0), thickness=4)
 
         for j in range(len(keypoints[i])):
             img = cv2.circle(img, center=(round(keypoints[i][j][0]), round(keypoints[i][j][1])),
-                             radius=2, color=(255, 0, 255), thickness=1)
+                             radius=4, color=(255, 0, 255), thickness=4)
 
     output = {"image": img,
               "keypoints": grouped_keypoints,

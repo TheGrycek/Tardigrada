@@ -10,6 +10,7 @@ import keypoints_detector.config as cfg
 from keypoints_detector.model import keypoint_detector
 from keypoints_detector.predict import predict, show_prediction
 from scale_detector.scale_detector import read_scale
+from scipy.interpolate import splprep, splev
 
 
 def parse_args():
@@ -26,7 +27,7 @@ def calc_dist(pt1, pt2):
     return np.sqrt(np.sum(np.square(pt1 - pt2)))
 
 
-def fit_curve(bbox, points, keypoints_num):
+def fit_polynomial(bbox, points, keypoints_num):
     bbox_w = bbox[0] - bbox[2]
     bbox_l = bbox[1] - bbox[3]
 
@@ -60,6 +61,21 @@ def fit_curve(bbox, points, keypoints_num):
     return pts
 
 
+def fit_bspline(bbox, points, keypoints_num):
+    try:
+        x = points[: keypoints_num - 2][:, 0]
+        y = points[: keypoints_num - 2][:, 1]
+        tck, u = splprep([x, y], s=3)
+        pts = splev(u, tck)
+        pts = np.round(np.hstack((np.resize(pts[0], (pts[0].shape[0], 1)),
+                                  np.resize(pts[1], (pts[1].shape[0], 1)))))
+    except ValueError:
+        pts = np.reshape(np.array(bbox), ((bbox.size // 2), 2))
+        return pts
+
+    return pts
+
+
 def calc_dimensions(length_pts, width_pts, scale_ratio):
     points = width_pts.astype(np.uint64)
     right, left = points
@@ -76,7 +92,8 @@ def calculate_mass(predicted, scale, img_path):
     lengths_points = []
 
     for i, (bbox, points) in enumerate(zip(predicted["bboxes"], predicted["keypoints"])):
-        length_pts = fit_curve(bbox, points, cfg.KEYPOINTS)
+        # length_pts = fit_polynomial(bbox, points, cfg.KEYPOINTS)
+        length_pts = fit_bspline(bbox, points, cfg.KEYPOINTS)
         lengths_points.append(length_pts)
         length, width = calc_dimensions(length_pts, points[-2:], scale_ratio)
 
@@ -149,7 +166,7 @@ def main(args):
                                       cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
 
                 for pts in lengths_points:
-                    img = cv2.polylines(img, [pts.astype(np.int32)], False, (255, 0, 0), 1)
+                    img = cv2.polylines(img, [pts.astype(np.int32)], False, (0, 255, 255), 2)
 
             else:
                 print("-" * 50)
