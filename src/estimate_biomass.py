@@ -86,7 +86,7 @@ def calc_dimensions(length_pts, width_pts, scale_ratio):
     return length, width
 
 
-def calculate_mass(predicted, scale, img_path, curve_fit_algorithm="bspine"):
+def calculate_mass(predicted, scale, img_path, curve_fit_algorithm="bspline"):
     scale_ratio = scale["um"] / scale["pix"]
     density = 1.04
     results = []
@@ -97,7 +97,7 @@ def calculate_mass(predicted, scale, img_path, curve_fit_algorithm="bspine"):
     elif curve_fit_algorithm == "polynomial":
         fit_algorithm = fit_polynomial
     else:
-        raise NotImplementedError
+        raise Exception("Wrong curve fit algorithm name.")
 
     for i, (bbox, points) in enumerate(zip(predicted["bboxes"], predicted["keypoints"])):
         length_pts = fit_algorithm(bbox, points, cfg.KEYPOINTS)
@@ -157,10 +157,10 @@ def main(args):
                 mass_mean = results_df["biomass"].mean()
                 mass_std = results_df["biomass"].std()
 
-                # print(f"image path: {img_path}\n"
-                #       f"Image scale: {image_scale}\n"
-                #       f"Image total mass: {mass_total} ug")
-                # print("-" * 50)
+                print(f"image path: {img_path}\n"
+                      f"Image scale: {image_scale}\n"
+                      f"Image total mass: {mass_total} ug")
+                print("-" * 50)
 
                 info_dict = {"scale": (f"Scale: {image_scale['um']} um", (50, 50)),
                              "number": (f"Animal number: {predicted['bboxes'].shape[0]}", (50, 100)),
