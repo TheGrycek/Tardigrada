@@ -5,10 +5,11 @@ import cv2
 import numpy as np
 import pandas as pd
 import torch
+import time
 
 import keypoints_detector.config as cfg
 from keypoints_detector.model import keypoint_detector
-from keypoints_detector.predict import predict, show_prediction
+from keypoints_detector.predict import predict
 from scale_detector.scale_detector import read_scale
 from scipy.interpolate import splprep, splev
 
@@ -85,15 +86,21 @@ def calc_dimensions(length_pts, width_pts, scale_ratio):
     return length, width
 
 
-def calculate_mass(predicted, scale, img_path):
+def calculate_mass(predicted, scale, img_path, curve_fit_algorithm="bspine"):
     scale_ratio = scale["um"] / scale["pix"]
     density = 1.04
     results = []
     lengths_points = []
 
+    if curve_fit_algorithm == "bspline":
+        fit_algorithm = fit_bspline
+    elif curve_fit_algorithm == "polynomial":
+        fit_algorithm = fit_polynomial
+    else:
+        raise NotImplementedError
+
     for i, (bbox, points) in enumerate(zip(predicted["bboxes"], predicted["keypoints"])):
-        # length_pts = fit_polynomial(bbox, points, cfg.KEYPOINTS)
-        length_pts = fit_bspline(bbox, points, cfg.KEYPOINTS)
+        length_pts = fit_algorithm(bbox, points, cfg.KEYPOINTS)
         lengths_points.append(length_pts)
         length, width = calc_dimensions(length_pts, points[-2:], scale_ratio)
 
@@ -103,7 +110,7 @@ def calculate_mass(predicted, scale, img_path):
             R = length / width
 
             # If the mass of the species Echiniscus is estimated, use different equation
-            if class_name == 'echiniscus':
+            if class_name == 'heter_ech':
                 mass = (1 / 12) * length * np.pi * (length / R) ** 2 * density * 10 ** -6  # [ug]
             else:
                 mass = length * np.pi * (length / (2 * R)) ** 2 * density * 10 ** -6  # [ug]
@@ -130,14 +137,14 @@ def main(args):
         ext_paths = list(args.input_dir.glob(f"*.{ext}"))
         images_paths.extend(ext_paths)
 
-    print(f"IMG PATHS: {images_paths}")
+    # print(f"IMG PATHS: {images_paths}")
 
-    # images = [Path("./images/train/krio5_OM_1.5_5.jpg")]
     model = keypoint_detector()
-    model.load_state_dict(torch.load("keypoints_detector/checkpoints/keypoints_detector_old.pth"))
+    model.load_state_dict(torch.load("keypoints_detector/checkpoints/keypoints_detector.pth"))
 
     for img_path in images_paths:
         try:
+            start = time.time()
             img = cv2.imread(str(img_path), 1)
             image_scale, img = read_scale(img, device="cpu")
             predicted = predict(model, img, device=cfg.DEVICE)
@@ -150,10 +157,10 @@ def main(args):
                 mass_mean = results_df["biomass"].mean()
                 mass_std = results_df["biomass"].std()
 
-                print(f"image path: {img_path}\n"
-                      f"Image scale: {image_scale}\n"
-                      f"Image total mass: {mass_total} ug")
-                print("-" * 50)
+                # print(f"image path: {img_path}\n"
+                #       f"Image scale: {image_scale}\n"
+                #       f"Image total mass: {mass_total} ug")
+                # print("-" * 50)
 
                 info_dict = {"scale": (f"Scale: {image_scale['um']} um", (50, 50)),
                              "number": (f"Animal number: {predicted['bboxes'].shape[0]}", (50, 100)),
@@ -173,6 +180,7 @@ def main(args):
                 print(f"Mass calculation results empty for file: {str(img_path)}")
                 print("-" * 50)
 
+            print(f"Inference time: {time.time() - start}")
             results_df.to_csv(args.output_dir / f"{img_path.stem}_results.csv")
             cv2.imwrite(str(args.output_dir / f"{img_path.stem}_results.jpg"), img)
             cv2.imshow('predicted', cv2.resize(img, (1400, 700)))
@@ -184,6 +192,3 @@ def main(args):
 
 if __name__ == '__main__':
     main(parse_args())
-
-    # img = cv2.imread("./images/krio5_OM_1.5_5.jpg")
-    # show_prediction(img)

@@ -88,6 +88,7 @@ def train(images_path, annotation_path, device, checkpoint_save_interval=True, s
     start = time()
     model.train()
     for epoch in range(cfg.EPOCHS):
+        start2 = time()
         epoch_losses = {key: [] for key in losses_names}
         for i, (imgs, targets) in enumerate(dataloaders["train"]):
             epoch_losses, train_loss_total = train_one_epoch(model, device, imgs, targets, optimizer, scheduler,
@@ -107,7 +108,7 @@ def train(images_path, annotation_path, device, checkpoint_save_interval=True, s
 
         if (epoch + 1) % print_stats_n_epoch == 0:
             print(f"epoch: {epoch + 1}, training loss={train_loss_total.item():.4f}, "
-                  f"validation loss={val_loss_total.item():.4f}")
+                  f"validation loss={val_loss_total.item():.4f}, time: {time() - start2}")
 
     torch.save(model.state_dict(), f"checkpoints/keypoints_detector.pth")
     print(f"TOTAL TRAINING TIME: {strftime('%H:%M:%S', gmtime(time() - start))}")
@@ -116,14 +117,16 @@ def train(images_path, annotation_path, device, checkpoint_save_interval=True, s
         out_path = Path("./training_results")
         out_path.mkdir(exist_ok=True, parents=True)
 
-        plt.figure(figsize=(40, 20))
+        plt.figure(figsize=(50, 20))
         for i, (loss_key, loss_list) in enumerate(losses.items(), 1):
             plt.subplot(2, 6, i)
             plt.grid(True)
             plt.plot([i + 1 for i in range(len(loss_list))], loss_list)
-            plt.title(loss_key)
-            plt.xlabel("Epoch")
-            plt.ylabel("Loss")
+            plt.title(loss_key, fontsize=30)
+            plt.xlabel("Epoch", fontsize=20)
+            plt.ylabel("Loss", fontsize=20)
+            plt.yticks(fontsize=17)
+            plt.xticks(fontsize=17)
 
         plt.savefig(out_path / "training_results")
         plt.show()
@@ -134,4 +137,5 @@ def train(images_path, annotation_path, device, checkpoint_save_interval=True, s
 if __name__ == '__main__':
     images_path = Path("../images/train")
     annotation_path = Path("../coco-1659778596.546996.json")
+    print(f"MY DEVICE: {cfg.DEVICE}")
     train(images_path, annotation_path, cfg.DEVICE, checkpoint_save_interval=True)

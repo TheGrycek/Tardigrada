@@ -46,6 +46,8 @@ def filter_cnts(cnts, scale_pts):
             continue
 
         rect_tilted = cv2.minAreaRect(cnt)
+        if rect_tilted[1][0] == 0 or rect_tilted[1][1] == 0:
+            continue
         if 0.5 < rect_tilted[1][0] / rect_tilted[1][1] < 2:
             continue
 
@@ -91,10 +93,11 @@ def read_scale(img, device="cpu"):
 
     result = filter(lambda res: res[1][-1] == "m", result)
     result = list(filter(lambda res: res[2] >= text_threshold, result))
-    cnts, bboxes_fit, bboxes, thresh = simple_segmenter(img, result[0][0])
 
-    if len(bboxes) == 0 or len(result) == 0:
+    if len(result) == 0:
         return {"pix": 0, "um": 0}, img
+
+    cnts, bboxes_fit, bboxes, thresh = simple_segmenter(img, result[0][0])
 
     scale_value = change_to_um(result[0][1])
     x, y, w, h = select_bbox(bboxes, result[0][0], img)

@@ -8,9 +8,9 @@ import torch
 import torchvision.transforms.functional as F
 from pycocotools.coco import COCO
 from torch.utils.data import Dataset, DataLoader
-from config import KEYPOINTS
 
 import config as cfg
+from config import KEYPOINTS
 
 
 class KeypointsDataset(Dataset):
@@ -57,29 +57,17 @@ class KeypointsDataset(Dataset):
             areas.append(coco_elem['area'])
             iscrowd.append(coco_elem["iscrowd"])
 
-        if self.transforms:
-            keypoints = np.asarray(keypoints).reshape((-1, self.points_num, 3))
-            visibility = keypoints[:, :, 2].reshape((-1, self.points_num, 1))
-            keypoints_no_vis = keypoints[:, :, :2].reshape((-1, 2))
-            transformed = self.augment(img, key_points=keypoints_no_vis, labels=labels, bboxes=bboxes)
-            keypoints = np.asarray(transformed["keypoints"]).reshape((-1, self.points_num, 2))
-            keypoints = np.concatenate((keypoints, visibility), axis=2)
-            transformed_bboxes = np.asarray(transformed['bboxes'])
-            if np.all(transformed_bboxes):
-                bboxes = transformed_bboxes
-                img = transformed["image"]
-
-        elif self.transforms_val:
-            keypoints = np.asarray(keypoints).reshape((-1, self.points_num, 3))
-            visibility = keypoints[:, :, 2].reshape((-1, self.points_num, 1))
-            keypoints_no_vis = keypoints[:, :, :2].reshape((-1, 2))
-            transformed = self.augment(img, key_points=keypoints_no_vis, labels=labels, bboxes=bboxes, augment_val=True)
-            keypoints = np.asarray(transformed["keypoints"]).reshape((-1, self.points_num, 2))
-            keypoints = np.concatenate((keypoints, visibility), axis=2)
-            transformed_bboxes = np.asarray(transformed['bboxes'])
-            if np.all(transformed_bboxes):
-                bboxes = transformed_bboxes
-                img = transformed["image"]
+        keypoints = np.asarray(keypoints).reshape((-1, self.points_num, 3))
+        visibility = keypoints[:, :, 2].reshape((-1, self.points_num, 1))
+        keypoints_no_vis = keypoints[:, :, :2].reshape((-1, 2))
+        transformed = self.augment(img, key_points=keypoints_no_vis, labels=labels, bboxes=bboxes,
+                                   augment_val=True if self.transforms_val else False)
+        keypoints = np.asarray(transformed["keypoints"]).reshape((-1, self.points_num, 2))
+        keypoints = np.concatenate((keypoints, visibility), axis=2)
+        transformed_bboxes = np.asarray(transformed['bboxes'])
+        if np.all(transformed_bboxes):
+            bboxes = transformed_bboxes
+            img = transformed["image"]
 
         img = F.to_tensor(img)
         annotation = {"image_id": torch.tensor([img_id]),
@@ -105,7 +93,6 @@ class KeypointsDataset(Dataset):
 
             transform = alb.Compose([
                 # alb.Resize(height=640, width=640),
-                # alb.RandomCrop(500, 500, always_apply=False, p=0.3),
                 alb.Perspective(scale=(0.05, 0.1), keep_size=True, pad_mode=0, fit_output=False, interpolation=1,
                                 always_apply=False, p=0.8),
                 alb.ShiftScaleRotate(shift_limit=0.0625, scale_limit=0.1, rotate_limit=180, border_mode=0, value=0,
@@ -148,7 +135,12 @@ def load_data(images_dir, annotation_file="../coco-1659778596.546996.json",
     train_cnt = total_cnt - val_cnt - test_cnt
 
     print(f"\nTRAINING IMAGES NUMBER: {train_cnt}\n")
-    dataset_train, dataset_val, dataset_test = torch.utils.data.random_split(dataset, (train_cnt, val_cnt, test_cnt))
+    dataset_train, dataset_val, dataset_test = torch.utils.data.random_split(
+        dataset,
+        (train_cnt, val_cnt, test_cnt),
+        generator=torch.Generator().manual_seed(1)
+    )
+
     dataset_train.transforms = transform
     dataset_val.transforms_val = transform_val
 
@@ -182,7 +174,7 @@ def get_normalization_params(images_dir="../images/train", annotation_file="../c
 
 def check_examples():
     random.seed(1)
-    dataloader = load_data(images_dir="../images/train", transform=True, transform_val=False)["train"]
+    dataloader = load_data(images_dir="../images/train", transform=True, transform_val=True)["val"]
 
     for img, annotation in dataloader:
         img = (img[0].numpy() * 255).astype(np.uint8)
@@ -197,12 +189,11 @@ def check_examples():
                 center = (int(round(keypoint[0].item())), int(round(keypoint[1].item())))
                 img = cv2.circle(img.copy(), center, 2, (0, 0, 255), 5)
 
-        print(f"IMG SHAPE: {img.shape}")
         cv2.imshow("img", cv2.resize(img, (0, 0), fx=0.5, fy=0.5))
         cv2.waitKey(1500)
 
 
 if __name__ == '__main__':
-    norm_params = get_normalization_params(annotation_file="../coco-1659778596.546996.json")
-    print(f"MEAN:{norm_params['mean']}\nSTD:{norm_params['std']}\n")
+    # norm_params = get_normalization_params(annotation_file="../coco-1659778596.546996.json")
+    # print(f"MEAN:{norm_params['mean']}\nSTD:{norm_params['std']}\n")
     check_examples()
