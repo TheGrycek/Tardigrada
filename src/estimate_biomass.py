@@ -5,16 +5,18 @@ import cv2
 import numpy as np
 import pandas as pd
 import torch
+import time
 
 import keypoints_detector.config as cfg
 from keypoints_detector.model import keypoint_detector
-from keypoints_detector.predict import predict, show_prediction
+from keypoints_detector.predict import predict
 from scale_detector.scale_detector import read_scale
+from scipy.interpolate import splprep, splev
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-i", "--input_dir", type=Path, default="./images/",
+    parser.add_argument("-i", "--input_dir", type=Path, default="./images/test",
                         help="Input images directory.")
     parser.add_argument("-o", "--output_dir", type=Path, default="../results/",
                         help="Outputs directory.")
@@ -22,38 +24,11 @@ def parse_args():
     return parser.parse_args()
 
 
-def filter_cnts(cnts):
-    cnts_filtered = []
-    bboxes_fit = []
-    bboxes = []
-    for cnt in cnts:
-        if cv2.contourArea(cnt) < 1000:
-            continue
-        rect_tilted = cv2.minAreaRect(cnt)
-        if 0.5 < rect_tilted[1][0] / rect_tilted[1][1] < 2:
-            continue
-        rect = cv2.boundingRect(cnt)
-        bboxes.append(rect)
-        cnts_filtered.append(cnt)
-        bboxes_fit.append(rect_tilted)
-
-    return cnts_filtered, bboxes_fit, bboxes
-
-
-def simple_segmenter(img):
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    ret, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
-    cnts, hier = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
-    cnts, bboxes_fit, bboxes = filter_cnts(cnts)
-
-    return cnts, bboxes_fit, bboxes, thresh
-
-
 def calc_dist(pt1, pt2):
     return np.sqrt(np.sum(np.square(pt1 - pt2)))
 
 
-def fit_curve(bbox, points, keypoints_num):
+def fit_polynomial(bbox, points, keypoints_num):
     bbox_w = bbox[0] - bbox[2]
     bbox_l = bbox[1] - bbox[3]
 
@@ -87,6 +62,21 @@ def fit_curve(bbox, points, keypoints_num):
     return pts
 
 
+def fit_bspline(bbox, points, keypoints_num):
+    try:
+        x = points[: keypoints_num - 2][:, 0]
+        y = points[: keypoints_num - 2][:, 1]
+        tck, u = splprep([x, y], s=3)
+        pts = splev(u, tck)
+        pts = np.round(np.hstack((np.resize(pts[0], (pts[0].shape[0], 1)),
+                                  np.resize(pts[1], (pts[1].shape[0], 1)))))
+    except ValueError:
+        pts = np.reshape(np.array(bbox), ((bbox.size // 2), 2))
+        return pts
+
+    return pts
+
+
 def calc_dimensions(length_pts, width_pts, scale_ratio):
     points = width_pts.astype(np.uint64)
     right, left = points
@@ -96,15 +86,21 @@ def calc_dimensions(length_pts, width_pts, scale_ratio):
     return length, width
 
 
-def calculate_mass(predicted, scale, img_path):
-    keypoints_num = 7
+def calculate_mass(predicted, scale, img_path, curve_fit_algorithm="bspline"):
     scale_ratio = scale["um"] / scale["pix"]
     density = 1.04
     results = []
     lengths_points = []
 
+    if curve_fit_algorithm == "bspline":
+        fit_algorithm = fit_bspline
+    elif curve_fit_algorithm == "polynomial":
+        fit_algorithm = fit_polynomial
+    else:
+        raise Exception("Wrong curve fit algorithm name.")
+
     for i, (bbox, points) in enumerate(zip(predicted["bboxes"], predicted["keypoints"])):
-        length_pts = fit_curve(bbox, points, keypoints_num)
+        length_pts = fit_algorithm(bbox, points, cfg.KEYPOINTS)
         lengths_points.append(length_pts)
         length, width = calc_dimensions(length_pts, points[-2:], scale_ratio)
 
@@ -114,7 +110,7 @@ def calculate_mass(predicted, scale, img_path):
             R = length / width
 
             # If the mass of the species Echiniscus is estimated, use different equation
-            if class_name == 'echiniscus':
+            if class_name == 'heter_ech':
                 mass = (1 / 12) * length * np.pi * (length / R) ** 2 * density * 10 ** -6  # [ug]
             else:
                 mass = length * np.pi * (length / (2 * R)) ** 2 * density * 10 ** -6  # [ug]
@@ -141,18 +137,16 @@ def main(args):
         ext_paths = list(args.input_dir.glob(f"*.{ext}"))
         images_paths.extend(ext_paths)
 
-    print(f"IMG PATHS: {images_paths}")
+    # print(f"IMG PATHS: {images_paths}")
 
-    # images = [Path("./images/krio5_OM_1.5_5.jpg")]
     model = keypoint_detector()
     model.load_state_dict(torch.load("keypoints_detector/checkpoints/keypoints_detector.pth"))
 
     for img_path in images_paths:
         try:
+            start = time.time()
             img = cv2.imread(str(img_path), 1)
-            cnts, bboxes_fit, bboxes, thresh = simple_segmenter(img)
-
-            image_scale, img = read_scale(img, bboxes, device="cpu")
+            image_scale, img = read_scale(img, device="cpu")
             predicted = predict(model, img, device=cfg.DEVICE)
             results_df, lengths_points = calculate_mass(predicted, image_scale, img_path)
 
@@ -179,16 +173,17 @@ def main(args):
                                       cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
 
                 for pts in lengths_points:
-                    img = cv2.polylines(img, [pts.astype(np.int32)], False, (255, 0, 0), 1)
+                    img = cv2.polylines(img, [pts.astype(np.int32)], False, (0, 255, 255), 2)
 
             else:
                 print("-" * 50)
                 print(f"Mass calculation results empty for file: {str(img_path)}")
                 print("-" * 50)
 
+            print(f"Inference time: {time.time() - start}")
             results_df.to_csv(args.output_dir / f"{img_path.stem}_results.csv")
             cv2.imwrite(str(args.output_dir / f"{img_path.stem}_results.jpg"), img)
-            cv2.imshow('predicted', cv2.resize(img, (0, 0), fx=0.6, fy=0.6))
+            cv2.imshow('predicted', cv2.resize(img, (1400, 700)))
             cv2.waitKey(2500)
 
         except Exception as e:
@@ -197,6 +192,3 @@ def main(args):
 
 if __name__ == '__main__':
     main(parse_args())
-
-    # img = cv2.imread("./images/krio5_OM_1.5_5.jpg")
-    # show_prediction(img)

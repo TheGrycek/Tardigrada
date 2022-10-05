@@ -10,3 +10,4 @@ WORKDIR /biomass_calculation/
 COPY requirements.txt .
 RUN python3 -m pip install -r requirements.txt
 RUN python -c "import easyocr ; easyocr.Reader(['en'])"
+RUN python -c "from torch.utils.model_zoo import load_url; load_url('https://download.pytorch.org/models/resnet50-0676ba61.pth')"
