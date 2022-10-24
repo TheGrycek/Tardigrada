@@ -1,27 +1,16 @@
-import argparse
-from pathlib import Path
+import logging
+import time
 
 import cv2
 import numpy as np
 import pandas as pd
 import torch
-import time
-
-import keypoints_detector.config as cfg
-from keypoints_detector.model import keypoint_detector
-from keypoints_detector.predict import predict
-from scale_detector.scale_detector import read_scale
 from scipy.interpolate import splprep, splev
 
-
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-i", "--input_dir", type=Path, default="./images/test",
-                        help="Input images directory.")
-    parser.add_argument("-o", "--output_dir", type=Path, default="../results/",
-                        help="Outputs directory.")
-
-    return parser.parse_args()
+import src.keypoints_detector.config as cfg
+from src.keypoints_detector.model import keypoint_detector
+from src.keypoints_detector.predict import predict
+from src.scale_detector.scale_detector import read_scale
 
 
 def calc_dist(pt1, pt2):
@@ -128,7 +117,7 @@ def calculate_mass(predicted, scale, img_path, curve_fit_algorithm="bspline"):
     return pd.DataFrame(results), lengths_points
 
 
-def main(args):
+def main(args, queue):
     args.output_dir.mkdir(exist_ok=True, parents=True)
     images_extensions = ("png", "tif", "jpg", "jpeg")
 
@@ -137,11 +126,8 @@ def main(args):
         ext_paths = list(args.input_dir.glob(f"*.{ext}"))
         images_paths.extend(ext_paths)
 
-    # print(f"IMG PATHS: {images_paths}")
-
     model = keypoint_detector()
-    model.load_state_dict(torch.load("keypoints_detector/checkpoints/keypoints_detector.pth"))
-
+    model.load_state_dict(torch.load("../keypoints_detector/checkpoints/keypoints_detector.pth"))
     for img_path in images_paths:
         try:
             start = time.time()
@@ -157,10 +143,11 @@ def main(args):
                 mass_mean = results_df["biomass"].mean()
                 mass_std = results_df["biomass"].std()
 
-                print(f"image path: {img_path}\n"
-                      f"Image scale: {image_scale}\n"
-                      f"Image total mass: {mass_total} ug")
-                print("-" * 50)
+                logging.info(f"image path: {img_path}\n"
+                             f"Image scale: {image_scale}\n"
+                             f"Image total mass: {mass_total} ug\n"
+                             f"{'-' * 50}")
+                queue.put(F"Image processed: {str(img_path)}\n")
 
                 info_dict = {"scale": (f"Scale: {image_scale['um']} um", (50, 50)),
                              "number": (f"Animal number: {predicted['bboxes'].shape[0]}", (50, 100)),
@@ -176,19 +163,23 @@ def main(args):
                     img = cv2.polylines(img, [pts.astype(np.int32)], False, (0, 255, 255), 2)
 
             else:
-                print("-" * 50)
-                print(f"Mass calculation results empty for file: {str(img_path)}")
-                print("-" * 50)
+                logging.info(f"{'-' * 50}"
+                             f"Mass calculation results empty for file: {str(img_path)}"
+                             f"{'-' * 50}")
+                queue.put(f"results empty for {str(img_path)}")
 
-            print(f"Inference time: {time.time() - start}")
+            logging.info(f"\nInference time: {time.time() - start}\n")
+
             results_df.to_csv(args.output_dir / f"{img_path.stem}_results.csv")
             cv2.imwrite(str(args.output_dir / f"{img_path.stem}_results.jpg"), img)
-            cv2.imshow('predicted', cv2.resize(img, (1400, 700)))
-            cv2.waitKey(2500)
+
+
+            # cv2.imshow('predicted', cv2.resize(img, (1400, 700)))
+            # cv2.waitKey(2500)
 
         except Exception as e:
             print(e)
+            logging.error(e)
 
-
-if __name__ == '__main__':
-    main(parse_args())
+    logging.info(f"\nProcessing finished.\n")
+    queue.put("Processing finished.\n")

@@ -1,10 +1,11 @@
 import cv2
-import keypoints_detector.config as cfg
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torchvision.transforms.functional as F
-from keypoints_detector.model import keypoint_detector
+
+import src.keypoints_detector.config as cfg
+from src.keypoints_detector.model import keypoint_detector
 
 
 def predict(model, img, device):
@@ -52,7 +53,7 @@ def predict(model, img, device):
 
 def show_prediction(img):
     model = keypoint_detector()
-    model.load_state_dict(torch.load("keypoints_detector/checkpoints/keypoints_detector_old.pth"))
+    model.load_state_dict(torch.load("../keypoints_detector/checkpoints/keypoints_detector_old.pth"))
     prediction = predict(model, img, cfg.DEVICE)
     cv2.imwrite("keypoint_rcnn_detection.jpg", prediction["image"])
 
