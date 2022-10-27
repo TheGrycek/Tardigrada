@@ -7,11 +7,17 @@ To automatically build and run docker container, launch script:
 ./build_and_run_docker.sh
 ```
 
-To run application:
+To run GUI application:
 ```bash
-cd src/gui
-python main_window.py
+cd src/
+./run_gui_app.py
 ````
+
+To run inference visualization:
+```bash
+./estimate_biomass.py -i $input_path -o $output_path
+```
+
 
 ### Example Keypoint RCNN detection
 

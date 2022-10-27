@@ -12,7 +12,7 @@ class MsgWorker(QThread):
     msg_signal = pyqtSignal(str)
 
     def __init__(self, queue):
-        super(MsgWorker, self).__init__()
+        super().__init__()
         self.queue = queue
 
     def run(self):
