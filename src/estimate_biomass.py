@@ -272,9 +272,8 @@ def visualize(args):
 
         except Exception as e:
             print(e)
-            logging.error(e)
 
-    logging.info(f"\nProcessing finished.\n")
+    print(f"\nProcessing finished.\n")
 
 
 if __name__ == '__main__':
