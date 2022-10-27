@@ -9,3 +9,5 @@ crops/
 *.pth
 *.csv
 !images/keypoint_rcnn_detection.jpg
+*.log
+*.zip

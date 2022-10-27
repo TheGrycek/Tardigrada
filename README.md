@@ -6,10 +6,11 @@ To automatically build and run docker container, launch script:
 ```bash
 ./build_and_run_docker.sh
 ```
-Estimate tardigrade biomass in the images:
 
+To run application:
 ```bash
-python estimate_biomass.py -i ./images
+cd src/gui
+python main_window.py
 ````
 
 ### Example Keypoint RCNN detection
