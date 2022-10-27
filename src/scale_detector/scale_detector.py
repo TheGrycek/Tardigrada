@@ -95,7 +95,7 @@ def read_scale(img, device="cpu"):
     result = list(filter(lambda res: res[2] >= text_threshold, result))
 
     if len(result) == 0:
-        return {"pix": 0, "um": 0}, img
+        return {"um": 0, "bbox": []}, img
 
     cnts, bboxes_fit, bboxes, thresh = simple_segmenter(img, result[0][0])
 
@@ -106,5 +106,5 @@ def read_scale(img, device="cpu"):
     img = cv2.putText(img, 'scale', (x, y), cv2.FONT_HERSHEY_SIMPLEX,
                       1, (255, 0, 0), 2, cv2.LINE_AA)
 
-    output = {"pix": w, "um": scale_value}
+    output = {"um": scale_value, "bbox": [x, y, w, h]}
     return output, img

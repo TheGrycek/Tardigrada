@@ -4,8 +4,9 @@ import numpy as np
 import torch
 import torchvision.transforms.functional as F
 
-import src.keypoints_detector.config as cfg
-from src.keypoints_detector.model import keypoint_detector
+import keypoints_detector.config as cfg
+from keypoints_detector.model import keypoint_detector
+
 
 
 def predict(model, img, device):

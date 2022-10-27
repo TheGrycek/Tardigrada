@@ -1,16 +1,30 @@
+#!/usr/bin/env python3
+import argparse
 import logging
 import time
+from pathlib import Path
 
 import cv2
 import numpy as np
 import pandas as pd
 import torch
+import ujson
 from scipy.interpolate import splprep, splev
 
-import src.keypoints_detector.config as cfg
-from src.keypoints_detector.model import keypoint_detector
-from src.keypoints_detector.predict import predict
-from src.scale_detector.scale_detector import read_scale
+import keypoints_detector.config as cfg
+from keypoints_detector.model import keypoint_detector
+from keypoints_detector.predict import predict
+from scale_detector.scale_detector import read_scale
+
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-i", "--input_dir", type=Path, default="./images/test",
+                        help="Input images directory.")
+    parser.add_argument("-o", "--output_dir", type=Path, default="../results/",
+                        help="Outputs directory.")
+
+    return parser.parse_args()
 
 
 def calc_dist(pt1, pt2):
@@ -76,7 +90,7 @@ def calc_dimensions(length_pts, width_pts, scale_ratio):
 
 
 def calculate_mass(predicted, scale, img_path, curve_fit_algorithm="bspline"):
-    scale_ratio = scale["um"] / scale["pix"]
+    scale_ratio = scale["um"] / scale["bbox"][2]
     density = 1.04
     results = []
     lengths_points = []
@@ -98,26 +112,27 @@ def calculate_mass(predicted, scale, img_path, curve_fit_algorithm="bspline"):
         if length and width != np.nan:
             R = length / width
 
-            # If the mass of the species Echiniscus is estimated, use different equation
+            # If the mass of the Echiniscus species is estimated, use different equation
             if class_name == 'heter_ech':
                 mass = (1 / 12) * length * np.pi * (length / R) ** 2 * density * 10 ** -6  # [ug]
             else:
                 mass = length * np.pi * (length / (2 * R)) ** 2 * density * 10 ** -6  # [ug]
 
-            info = {"img_path": img_path,
-                    "id": i,
-                    "class": class_name,
-                    "length": length,
-                    "width": width,
-                    "biomass": mass}
+            info = {
+                "img_path": img_path,
+                "id": i,
+                "class": class_name,
+                "length": length,
+                "width": width,
+                "biomass": mass
+            }
 
-            # print(info)
             results.append(info)
 
     return pd.DataFrame(results), lengths_points
 
 
-def main(args, queue):
+def prepare_paths(args):
     args.output_dir.mkdir(exist_ok=True, parents=True)
     images_extensions = ("png", "tif", "jpg", "jpeg")
 
@@ -126,8 +141,88 @@ def main(args, queue):
         ext_paths = list(args.input_dir.glob(f"*.{ext}"))
         images_paths.extend(ext_paths)
 
+    return images_paths
+
+
+def load_model():
     model = keypoint_detector()
-    model.load_state_dict(torch.load("../keypoints_detector/checkpoints/keypoints_detector.pth"))
+    model.load_state_dict(torch.load("./keypoints_detector/checkpoints/keypoints_detector.pth"))
+
+    return model
+
+
+def run_inference(args, queue, stop):
+    images_paths = prepare_paths(args)
+    model = load_model()
+    for i, img_path in enumerate(images_paths, start=1):
+        if stop():
+            queue.put("Processing stopped.\n")
+            break
+        try:
+            img = cv2.imread(str(img_path), 1)
+            image_scale, _ = read_scale(img, device="cpu")
+            predicted = predict(model, img, device=cfg.DEVICE)
+            out_dict = {
+                "path": str(img_path),
+                "scale_bbox": image_scale["bbox"],
+                "scale_value": image_scale["um"],
+                "annotations": []
+            }
+
+            for j in range(len(predicted["labels"])):
+                result_dict = {
+                    "label": int(predicted["labels"][j]),
+                    "bbox": predicted["bboxes"][j].tolist(),
+                    "keypoints": predicted["keypoints"][j].tolist(),
+                    "score": float(predicted["scores"][j])
+                }
+                out_dict["annotations"].append(result_dict)
+
+            out_path = args.output_dir / (img_path.stem + ".json")
+            ujson.dump(out_dict, out_path.open("w"))
+            queue.put(f"[{i}/{len(images_paths)}] Image inferenced: {str(img_path)}\n")
+
+        except Exception as e:
+            logging.error(e)
+            queue.put(str(e) + "\n")
+
+    if not stop():
+        queue.put(f"Inference finished.\n")
+
+
+def run_calc_mass(args, queue, stop):
+    json_paths = list(args.output_dir.glob(f"*.json"))
+
+    for i, json_path in enumerate(json_paths, start=1):
+        if stop():
+            queue.put("Processing stopped.\n")
+            break
+        annotation_dict = ujson.load(json_path.open("r"))
+        img_path = Path(annotation_dict["path"])
+        image_scale = {
+            "um": annotation_dict["scale_value"],
+            "bbox": annotation_dict["scale_bbox"]
+        }
+        predicted = {"keypoints": [], "bboxes": [], "labels": []}
+        for annot in annotation_dict["annotations"]:
+            predicted["keypoints"].append(annot["keypoints"])
+            predicted["bboxes"].append(annot["bbox"])
+            predicted["labels"].append(annot["label"])
+
+        predicted["keypoints"] = np.round(predicted["keypoints"], 0)[:, :, :2]
+        results_df, lengths_points = calculate_mass(predicted, image_scale, str(img_path))
+        results_df.to_csv(args.output_dir / f"{img_path.stem}_results.csv")
+
+        queue.put(f"[{i}/{len(json_paths)}] Mass calculated: {str(img_path)}\n")
+
+    if not stop():
+        queue.put(f"Mass calculation finished.\n")
+
+
+def visualize(args):
+    images_paths = prepare_paths(args)
+    model = load_model()
+
     for img_path in images_paths:
         try:
             start = time.time()
@@ -143,11 +238,11 @@ def main(args, queue):
                 mass_mean = results_df["biomass"].mean()
                 mass_std = results_df["biomass"].std()
 
-                logging.info(f"image path: {img_path}\n"
-                             f"Image scale: {image_scale}\n"
-                             f"Image total mass: {mass_total} ug\n"
-                             f"{'-' * 50}")
-                queue.put(F"Image processed: {str(img_path)}\n")
+                print(f"image path: {img_path}\n"
+                      f"Image scale: {image_scale}\n"
+                      f"Image total mass: {mass_total} ug\n"
+                      f"{'-' * 50}")
+                print(F"Image processed: {str(img_path)}\n")
 
                 info_dict = {"scale": (f"Scale: {image_scale['um']} um", (50, 50)),
                              "number": (f"Animal number: {predicted['bboxes'].shape[0]}", (50, 100)),
@@ -163,23 +258,23 @@ def main(args, queue):
                     img = cv2.polylines(img, [pts.astype(np.int32)], False, (0, 255, 255), 2)
 
             else:
-                logging.info(f"{'-' * 50}"
-                             f"Mass calculation results empty for file: {str(img_path)}"
-                             f"{'-' * 50}")
-                queue.put(f"results empty for {str(img_path)}")
+                print(f"{'-' * 50}"
+                      f"Mass calculation results empty for file: {str(img_path)}"
+                      f"{'-' * 50}")
 
-            logging.info(f"\nInference time: {time.time() - start}\n")
+            print(f"\nInference time: {time.time() - start}\n")
 
-            results_df.to_csv(args.output_dir / f"{img_path.stem}_results.csv")
-            cv2.imwrite(str(args.output_dir / f"{img_path.stem}_results.jpg"), img)
+            # results_df.to_csv(args.output_dir / f"{img_path.stem}_results.csv")
+            # cv2.imwrite(str(args.output_dir / f"{img_path.stem}_results.jpg"), img)
 
-
-            # cv2.imshow('predicted', cv2.resize(img, (1400, 700)))
-            # cv2.waitKey(2500)
+            cv2.imshow('predicted', cv2.resize(img, (1400, 700)))
+            cv2.waitKey(2500)
 
         except Exception as e:
             print(e)
-            logging.error(e)
 
-    logging.info(f"\nProcessing finished.\n")
-    queue.put("Processing finished.\n")
+    print(f"\nProcessing finished.\n")
+
+
+if __name__ == '__main__':
+    visualize(parse_args())
