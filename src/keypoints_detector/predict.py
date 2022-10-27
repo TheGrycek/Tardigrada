@@ -8,6 +8,7 @@ import keypoints_detector.config as cfg
 from keypoints_detector.model import keypoint_detector
 
 
+
 def predict(model, img, device):
     model.eval().to(device)
 

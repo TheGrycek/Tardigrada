@@ -5,6 +5,7 @@ from threading import Thread
 import matplotlib.pyplot as plt
 from PyQt5 import QtGui
 from PyQt5.QtCore import QThread, pyqtSignal
+
 from PyQt5.QtWidgets import QPushButton, QFileDialog, QTextEdit, QMainWindow
 
 

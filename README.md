@@ -15,6 +15,7 @@ cd src/
 
 To run inference visualization:
 ```bash
+cd src/
 ./estimate_biomass.py -i $input_path -o $output_path
 ```
 

@@ -222,6 +222,7 @@ def run_calc_mass(args, queue, stop):
 def visualize(args):
     images_paths = prepare_paths(args)
     model = load_model()
+
     for img_path in images_paths:
         try:
             start = time.time()
@@ -271,6 +272,7 @@ def visualize(args):
 
         except Exception as e:
             print(e)
+            logging.error(e)
 
     logging.info(f"\nProcessing finished.\n")
 
