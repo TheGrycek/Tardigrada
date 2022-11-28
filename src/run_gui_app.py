@@ -6,12 +6,12 @@ from collections import namedtuple
 from PyQt5.QtWidgets import QApplication
 
 from estimate_biomass import run_inference, run_calc_mass
-from gui.main_window import Window
+from gui.main_window import UI
 
 logging.basicConfig(level=logging.DEBUG, filename="logging.log")
 
 
-class AppWindow(Window):
+class MainWindow(UI):
     def __init__(self):
         super().__init__()
 
@@ -32,6 +32,6 @@ class AppWindow(Window):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = AppWindow()
+    window = MainWindow()
     window.show()
     app.exec_()
