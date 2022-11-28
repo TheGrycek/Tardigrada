@@ -1,6 +1,7 @@
 __pycache__/
 .idea/
 src/images/
+src/gui/icons
 crops/
 *.jpg
 *.png
