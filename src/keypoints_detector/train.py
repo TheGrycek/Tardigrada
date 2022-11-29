@@ -13,13 +13,14 @@ from model import keypoint_detector
 import matplotlib.pyplot as plt  # TODO: matplotlib must be imported after torchvision model to avoid SIGSEGV error!
 
 seed = 123
+random.seed(seed)
+np.random.seed(seed)
 torch.manual_seed(seed)
 torch.cuda.manual_seed(seed)
 torch.cuda.manual_seed_all(seed)
-np.random.seed(seed)
-random.seed(seed)
 torch.backends.cudnn.benchmark = False
 torch.backends.cudnn.deterministic = True
+# torch.use_deterministic_algorithms(True)
 
 
 def train_one_epoch(model, device, imgs, targets, optimizer, scheduler, epoch_losses, losses_names):
@@ -27,7 +28,7 @@ def train_one_epoch(model, device, imgs, targets, optimizer, scheduler, epoch_lo
     targets = [{k: v.to(device) for k, v in target.items()} for target in targets]
 
     loss_dict = model(img_batch, targets)
-    loss_total = sum(loss for loss in loss_dict.values())
+    loss_total = sum(loss * cfg.LOSS_WEIGHTS[name] for name, loss in loss_dict.items())
 
     optimizer.zero_grad()
     loss_total.backward()
@@ -45,7 +46,7 @@ def validate(model, device, imgs, targets, epoch_losses, losses_names):
     targets = [{k: v.to(device) for k, v in target.items()} for target in targets]
 
     val_loss_dict = model(img_batch, targets)
-    val_loss_total = sum(loss for loss in val_loss_dict.values())
+    val_loss_total = sum(loss * cfg.LOSS_WEIGHTS[name] for name, loss in val_loss_dict.items())
 
     epoch_losses["val_loss_total"].append(float(val_loss_total.item()))
     for loss_key in losses_names[7:]:
@@ -64,7 +65,7 @@ def train(images_path, annotation_path, device, checkpoint_save_interval=True, s
 
     dataloaders = load_data(images_dir=str(images_path),
                             annotation_file=str(annotation_path),
-                            transform=True, transform_val=False, val_ratio=cfg.VAL_RATIO, test_ratio=cfg.TEST_RATIO)
+                            transform=False, transform_val=False, val_ratio=cfg.VAL_RATIO, test_ratio=cfg.TEST_RATIO)
 
     scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=cfg.MILESTONES, gamma=cfg.GAMMA)
 
@@ -95,9 +96,9 @@ def train(images_path, annotation_path, device, checkpoint_save_interval=True, s
                                                              epoch_losses, losses_names)
 
         # validate using training mode, since batch-norm layers are frozen
-        with torch.no_grad():
-            for i, (imgs, targets) in enumerate(dataloaders["val"]):
-                epoch_losses, val_loss_total = validate(model, device, imgs, targets, epoch_losses, losses_names)
+        # with torch.no_grad():
+            # for i, (imgs, targets) in enumerate(dataloaders["val"]):
+            #     epoch_losses, val_loss_total = validate(model, device, imgs, targets, epoch_losses, losses_names)
 
         for loss_key in losses_names:
             losses[loss_key].append(np.asarray(epoch_losses[loss_key]).mean())
@@ -106,11 +107,14 @@ def train(images_path, annotation_path, device, checkpoint_save_interval=True, s
             if epoch % cfg.CHECKPOINT_SAVE_INTERVAL == 0:
                 torch.save(model.state_dict(), f"checkpoints/segmenter_checkpoint{epoch}.pth")
 
-        if (epoch + 1) % print_stats_n_epoch == 0:
-            print(f"epoch: {epoch + 1}, training loss={train_loss_total.item():.4f}, "
-                  f"validation loss={val_loss_total.item():.4f}, time: {time() - start2}")
+        # if (epoch + 1) % print_stats_n_epoch == 0:
+        #     print(f"epoch: {epoch + 1}, training loss={train_loss_total.item():.4f}, "
+        #           f"validation loss={val_loss_total.item():.4f}, time: {time() - start2}")
 
-    torch.save(model.state_dict(), f"checkpoints/keypoints_detector.pth")
+        if (epoch + 1) % print_stats_n_epoch == 0:
+            print(f"epoch: {epoch + 1}, training loss={train_loss_total.item():.4f}, time: {time() - start2}")
+
+    torch.save(model.state_dict(), f"checkpoints/keypoints_detector5epoch.pth")
     print(f"TOTAL TRAINING TIME: {strftime('%H:%M:%S', gmtime(time() - start))}")
 
     if save_plots:
