@@ -8,10 +8,9 @@ import torch
 import torchvision.transforms.functional as F
 from pycocotools.coco import COCO
 from torch.utils.data import Dataset, DataLoader
-from augmentations import scale_rotate
-
 
 import config as cfg
+from augmentations import scale_rotate, tensor2rgb
 from config import KEYPOINTS
 
 seed = 123
@@ -77,8 +76,8 @@ class KeypointsDataset(Dataset):
         return len(self.ids)
 
     def augment(self, img, keypoints, bboxes, labels):
-            img, bboxes, keypoints, labels = scale_rotate(img, bboxes, keypoints, labels)
-            visibility = keypoints[:, :, 2].reshape((-1, self.points_num, 1))
+        # custom scale and rotation function- albumentations bug
+            img, keypoints, bboxes, labels = scale_rotate(img, keypoints, bboxes, labels, keypoints_num=self.points_num)
             one_of = [alb.ImageCompression(p=1),
                       alb.Blur(blur_limit=5, p=1),
                       alb.GaussNoise(p=1),
@@ -112,7 +111,7 @@ def seed_worker(worker_id):
     random.seed(worker_seed)
 
 
-def load_data(images_dir, annotation_file="../coco-1659778596.546996.json",
+def load_data(images_dir, annotation_file=cfg.ANNOTATON_FILE,
               transform=True, shuffle=False, val_ratio=cfg.VAL_RATIO, test_ratio=cfg.TEST_RATIO):
     dataset = KeypointsDataset(images_dir=images_dir, annotation_file=annotation_file, transforms=transform)
     total_cnt = dataset.__len__()
@@ -121,7 +120,9 @@ def load_data(images_dir, annotation_file="../coco-1659778596.546996.json",
     train_cnt = total_cnt - val_cnt - test_cnt
     generator = torch.Generator().manual_seed(1)
 
-    print(f"\nTRAINING IMAGES NUMBER: {train_cnt}\n")
+    print(f"\nTRAINING IMAGES NUMBER: {train_cnt}\n"
+          f"VALIDATION IMAGES NUMBER: {val_cnt}\n"
+          f"TESTING IMAGES NUMBER: {test_cnt}\n")
     dataset_train, dataset_val, dataset_test = torch.utils.data.random_split(
         dataset,
         (train_cnt, val_cnt, test_cnt),
@@ -138,7 +139,7 @@ def load_data(images_dir, annotation_file="../coco-1659778596.546996.json",
     return dataloaders
 
 
-def get_normalization_params(images_dir="../images/train", annotation_file="../coco-1659778596.546996.json"):
+def get_normalization_params(images_dir="../images/train", annotation_file=cfg.ANNOTATON_FILE):
     dataset = KeypointsDataset(images_dir=images_dir, annotation_file=annotation_file, transforms=False)
     dataloader = DataLoader(dataset=dataset, batch_size=cfg.BATCH_SIZE,
                             shuffle=False)
@@ -161,9 +162,7 @@ def check_examples():
     dataloader = load_data(images_dir="../images/train", transform=True)["val"]
 
     for i, (img, annotation) in enumerate(dataloader):
-        img = (img[0].numpy() * 255).astype(np.uint8)
-        img = np.swapaxes(img, 0, 1)
-        img = np.swapaxes(img, 1, 2)
+        img = tensor2rgb(img)
         keypoints, bboxes = annotation[0]["keypoints"], annotation[0]["boxes"]
 
         for obj_keypoints, bbox in zip(keypoints, bboxes):

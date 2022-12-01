@@ -11,6 +11,7 @@ import src.keypoints_detector.config as cfg
 from src.keypoints_detector.model import keypoint_detector
 from src.keypoints_detector.predict import predict
 from src.scale_detector.scale_detector import read_scale
+from collections import defaultdict
 
 
 def calc_dist(pt1, pt2):
@@ -80,16 +81,13 @@ def calculate_mass(predicted, scale, img_path, curve_fit_algorithm="bspline"):
     density = 1.04
     results = []
     lengths_points = []
-
-    if curve_fit_algorithm == "bspline":
-        fit_algorithm = fit_bspline
-    elif curve_fit_algorithm == "polynomial":
-        fit_algorithm = fit_polynomial
-    else:
-        raise Exception("Wrong curve fit algorithm name.")
+    fit_algorithms = {
+        "bspline": fit_bspline,
+        "polynomial": fit_polynomial
+    }
 
     for i, (bbox, points) in enumerate(zip(predicted["bboxes"], predicted["keypoints"])):
-        length_pts = fit_algorithm(bbox, points, cfg.KEYPOINTS)
+        length_pts = fit_algorithms[curve_fit_algorithm](bbox, points, cfg.KEYPOINTS)
         lengths_points.append(length_pts)
         length, width = calc_dimensions(length_pts, points[-2:], scale_ratio)
 

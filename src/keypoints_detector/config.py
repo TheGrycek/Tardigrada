@@ -2,17 +2,18 @@ import torch
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
+ANNOTATON_FILE = "../coco-1659778596.546996.json"
 # TRAINING HYPER-PARAMETERS
-LEARNING_RATE = 0.002 # 0.001
+LEARNING_RATE = 0.002  # 0.001
 MOMENTUM = 0.1
 WEIGHT_DECAY = 0.0001
 GAMMA = 0.5
 MILESTONES = [200, 400]
-EPOCHS = 3000
-# EPOCHS = 25
+# EPOCHS = 3000
+EPOCHS = 1
 BATCH_SIZE = 1
 TEST_RATIO = 0
-VAL_RATIO = 0.99  # 0.1
+VAL_RATIO = 0.98  # 0.1
 CHECKPOINT_SAVE_INTERVAL = 20
 NUM_WORKERS = 5
 INSTANCE_CATEGORY_NAMES = ['__background__', 'eutar_bla', 'heter_ech', 'eutar_tra']
