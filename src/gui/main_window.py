@@ -1,4 +1,4 @@
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 from pathlib import Path
 from queue import Queue
 from threading import Thread
@@ -31,17 +31,21 @@ class InstanceWindow(QDialog):
 
 
 class ImageObject:
-    def __init__(self, name, bbox):
+    def __init__(self, name, bbox, keypoints=None, extra_data=None):
         self.category_name = name
-        self.box = bbox
-        self.points = {i: None for i in range(1, 8)}
+        self.bbox = bbox
+        self.keypoints = keypoints
+        self.extra_data = extra_data
+
+    def update_extra_data(self, data):
+        self.extra_data = data
 
     def update_points(self, pts: list):
         for i, pt in enumerate(pts):
-            self.points[i + 1] = pt
+            self.keypoints[i + 1] = pt
 
-    def update_box(self, box: list):
-        self.box = box
+    def update_box(self, bbox: list):
+        self.bbox = bbox
 
     def update_name(self, name: str):
         self.category_name = name
@@ -61,6 +65,7 @@ class UI(QMainWindow):
         self.stop_proc_threads_flag = False
         self._folder_path_in = None
         self._folder_path_out = None
+        self.image_data = defaultdict(lambda: None)
         self.inference_thread = None
         self.mass_calc_thread = None
         self.correction_tool_thread = None
@@ -89,9 +94,12 @@ class UI(QMainWindow):
     def connect_widgets(self):
         self.actionOpen_Dir.triggered.connect(self.select_folder_in)
         self.actionChange_Save_Dir.triggered.connect(self.select_folder_out)
+        self.actionSave.triggered.connect(self.save_points)
+        # control tab
         self.inferenceButton.pressed.connect(self.start_inference)
         self.stopButton.pressed.connect(self.stop_processing)
         self.calculateButton.pressed.connect(self.start_calc_mass)
+        # correction tool tab
         self.openImageButton.pressed.connect(self.open_image)
         self.nextButton.pressed.connect(self.next_image)
         self.previousButton.pressed.connect(self.previous_image)
@@ -139,24 +147,46 @@ class UI(QMainWindow):
     def download_img_data(self, img_path):
         # TODO: create exception for no file
         data_path = img_path.parent / (img_path.stem + ".json")
-        data = ujson.load(data_path.open("rb"))
         self.image_objects = OrderedDict()
-        scale_bbox = data["scale_bbox"]
-        self.image_objects["scale"] = ImageObject("scale", scale_bbox)
-        category_list = list(self.category_names.values())
-        for i, annot in enumerate(data["annotations"]):
-            self.image_objects[f"tard_{i}"] = ImageObject(category_list[annot["label"] - 1], annot["bbox"])
-            self.image_objects[f"tard_{i}"].update_points(annot["keypoints"])
+        if data_path.is_file():
+            self.image_data = ujson.load(data_path.open("rb"))
+            # scale
+            scale_bbox = self.create_qtobjects("scale", self.image_data)
+            self.image_objects["scale"] = ImageObject("scale", scale_bbox,
+                                                      extra_data={"scale_value": self.image_data["scale_value"]})
+            # tardigrades
+            category_list = list(self.category_names.values())
+            for i, annot in enumerate(self.image_data["annotations"]):
+                tard_bbox, tard_pts = self.create_qtobjects("tardigrade", annot)
+                self.image_objects[f"tard_{i}"] = ImageObject(category_list[annot["label"] - 1], tard_bbox, tard_pts)
+
+    def create_qtobjects(self, name, data):
+        if name == "scale":
+            return self.daw_element(data["scale_bbox"], elem_type="rectangle")
+        if name == "tardigrade":
+            bbox = self.daw_element(data["bbox"], elem_type="rectangle")
+            pts = [self.daw_element(pt, elem_type="point") for pt in data["keypoints"]]
+            return bbox, pts
+
+    @staticmethod
+    def get_rect_position(obj):
+        rect_obj = obj.shape().controlPointRect()
+        return [rect_obj.topLeft().x(), rect_obj.topLeft().y(),
+                rect_obj.bottomRight().x(), rect_obj.bottomRight().y()]
+
+    @staticmethod
+    def get_point_position(obj):
+        pt_obj = obj.shape().controlPointRect()
+        return [pt_obj.x(), pt_obj.y()]
 
     def draw_img_data(self):
         for name, obj in self.image_objects.items():
             if name == "scale":
-                x, y, w, h = obj.box
-                self.daw_element([x, y, x + w, y + h], elem_type="rectangle")
+                self.daw_element(self.get_rect_position(obj.bbox), elem_type="rectangle")
             else:
-                self.daw_element(obj.box, elem_type="rectangle")
-                for pt in obj.points.values():
-                    self.daw_element(pt, elem_type="point")
+                self.daw_element(self.get_rect_position(obj.bbox), elem_type="rectangle")
+                for pt in obj.keypoints:
+                    self.daw_element(self.get_point_position(pt), elem_type="point")
 
     def set_scene(self, img_path: Path, img_num=None):
         self.initialize_scene()
@@ -166,7 +196,6 @@ class UI(QMainWindow):
         self.graphicsView.setScene(self.scene)
         if img_num is not None:
             self.current_image = img_num
-        self.draw_img_data()
 
     def inference_worker(self, stop):
         pass
@@ -237,6 +266,8 @@ class UI(QMainWindow):
         return super().eventFilter(source, event)
 
     def daw_element(self, data: list, elem_type="point"):
+        # TODO: moving does not update QGraphicsItem object position in self.image_objects
+        #  reimplement event handler using mouseReleaseEvent and mousePressEvent
         if elem_type == "point":
             x, y = data
             pos_x = round(x - self.point_size / 2)
@@ -244,6 +275,7 @@ class UI(QMainWindow):
             pt = self.scene.addEllipse(pos_x, pos_y, self.point_size, self.point_size, self.pen_red, self.brush_red)
             pt.setFlag(QGraphicsItem.ItemIsMovable)
             pt.setFlag(QGraphicsItem.ItemIsSelectable)
+            return pt
 
         elif elem_type == "rectangle":
             x1, y1, x2, y2 = data
@@ -252,14 +284,37 @@ class UI(QMainWindow):
             rect = self.scene.addRect(round(x1), round(y1), w, h, self.pen_blue, self.brush_transparent)
             rect.setFlag(QGraphicsItem.ItemIsMovable)
             rect.setFlag(QGraphicsItem.ItemIsSelectable)
+            return rect
 
     def create_instance(self):
         self.window = InstanceWindow()
         self.window.show()
         if self.window.exec():
             instance_class = self.window.comboBox.currentText()
-            self.create_instance_object(self.category_names[instance_class])
+            self.create_object_instance(self.category_names[instance_class])
 
-    def create_instance_object(self, class_name):
+    def create_object_instance(self, class_name):
         new_object = ImageObject(class_name, None)
         # TODO finish this function
+
+    def save_points(self):
+        img_path = self.images_paths[self.current_image]
+        data_path = img_path.parent / (img_path.stem + ".json")
+        img_data = {"path": str(img_path)}
+        category_list = list(self.category_names.values())
+        annotations = []
+
+        for name, obj in self.image_objects.items():
+            if name == "scale":
+                img_data["scale_value"] = obj.extra_data["scale_value"]
+                img_data["scale_bbox"] = self.get_rect_position(obj.bbox)
+            else:
+                annotations.append({
+                    "label": category_list.index(obj.category_name) + 1,
+                    "bbox": self.get_rect_position(obj.bbox),
+                    "keypoints": [self.get_point_position(pt) for pt in obj.keypoints]
+                })
+
+        img_data["annotations"] = annotations
+        ujson.dump(img_data, data_path.open("w"))
+        self.msg_queue.put(f"Changes saved to the file {str(data_path)}.\n")
