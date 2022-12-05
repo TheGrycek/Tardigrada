@@ -10,8 +10,8 @@ from pycocotools.coco import COCO
 from torch.utils.data import Dataset, DataLoader
 
 import config as cfg
-from augmentations import scale_rotate, tensor2rgb
 from config import KEYPOINTS
+from utils import tensor2rgb
 
 seed = 123
 random.seed(123)
@@ -25,8 +25,10 @@ class KeypointsDataset(Dataset):
         self.ids = list(sorted(self.coco.imgs.keys()))
         self.transforms = transforms
         self.points_num = KEYPOINTS
-
         self.min_area = 100
+
+    def __len__(self):
+        return len(self.ids)
 
     def __getitem__(self, index):
         coco = self.coco
@@ -39,8 +41,8 @@ class KeypointsDataset(Dataset):
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
         objects_num = len(coco_annotation)
+        bboxes, areas, keypoints, labels, iscrowd = [], [], [], [], []
 
-        bboxes, areas, keypoints, keypoints_vis, labels, iscrowd = [], [], [], [], [], []
         for i in range(objects_num):
             coco_elem = coco_annotation[i]
             x_min = coco_elem['bbox'][0]
@@ -48,36 +50,29 @@ class KeypointsDataset(Dataset):
             x_max = x_min + coco_elem['bbox'][2]
             y_max = y_min + coco_elem['bbox'][3]
 
-            coco_keypoints = coco_elem['keypoints']
-            coco_labels = coco_elem["category_id"]
-            boxes = [x_min, y_min, x_max, y_max]
-
-            bboxes.append(boxes)
-            keypoints.append(coco_keypoints)
-            labels.append(coco_labels)
+            bboxes.append([x_min, y_min, x_max, y_max])
+            keypoints.append(np.asarray(coco_elem['keypoints']).reshape((self.points_num, 3))[:, :2])
+            labels.append(coco_elem["category_id"])
             areas.append(coco_elem['area'])
             iscrowd.append(coco_elem["iscrowd"])
 
-        keypoints = np.asarray(keypoints).reshape((-1, self.points_num, 3))
         if self.transforms:
-            img, bboxes, keypoints, labels = self.augment(img, keypoints=keypoints, labels=labels, bboxes=bboxes)
+            img, bboxes, keypoints, labels = self.augment(img, bboxes, np.asarray(keypoints).reshape(-1, 2), labels)
 
-        img = F.to_tensor(img)
+        keypoints = np.asarray(keypoints).reshape((-1, self.points_num, 2))
+        visibility = np.ones((keypoints.shape[0], self.points_num, 1)) * 2
+        keypoints = np.concatenate((keypoints, visibility), axis=2)
+
         annotation = {"image_id": torch.tensor([img_id]),
-                      "boxes": torch.as_tensor(bboxes, dtype=torch.int16),
-                      "labels": torch.as_tensor(labels, dtype=torch.int64),
-                      "area": torch.as_tensor(areas, dtype=torch.float32),
-                      "iscrowd": torch.as_tensor(iscrowd, dtype=torch.int64),
-                      "keypoints": torch.as_tensor(keypoints, dtype=torch.float32).view(-1, self.points_num, 3)}
+                      "boxes": torch.as_tensor(np.asarray(bboxes), dtype=torch.int16),
+                      "labels": torch.as_tensor(np.asarray(labels), dtype=torch.int64),
+                      "area": torch.as_tensor(np.asarray(areas), dtype=torch.float32),
+                      "iscrowd": torch.as_tensor(np.asarray(iscrowd), dtype=torch.int64),
+                      "keypoints": torch.as_tensor(keypoints, dtype=torch.float32)}
 
-        return img, annotation
+        return F.to_tensor(img), annotation
 
-    def __len__(self):
-        return len(self.ids)
-
-    def augment(self, img, keypoints, bboxes, labels):
-        # custom scale and rotation function- albumentations bug
-            img, keypoints, bboxes, labels = scale_rotate(img, keypoints, bboxes, labels, keypoints_num=self.points_num)
+    def augment(self, img, bboxes, keypoints, labels):
             one_of = [alb.ImageCompression(p=1),
                       alb.Blur(blur_limit=5, p=1),
                       alb.GaussNoise(p=1),
@@ -86,8 +81,8 @@ class KeypointsDataset(Dataset):
                       alb.Downscale(scale_min=0.25, scale_max=0.75, p=1),
                       alb.FancyPCA(alpha=0.1, p=1),
                       ]
-
             transform = alb.Compose([
+                alb.Affine(interpolation=3, p=0.9),
                 *[alb.OneOf(one_of, p=0.6) for _ in range(3)],
                 alb.ColorJitter(brightness=0.6, contrast=0.6, saturation=0.6, hue=0.6, p=0.7),
                 alb.ChannelShuffle(p=0.5),
@@ -98,7 +93,7 @@ class KeypointsDataset(Dataset):
             )
             transformed = transform(image=img, keypoints=keypoints, bboxes=bboxes, bboxes_labels=labels)
 
-            return transformed["image"], np.asarray(transformed['bboxes']), keypoints, labels
+            return transformed["image"], transformed['bboxes'], transformed["keypoints"], labels
 
 
 def collate_function(batch):

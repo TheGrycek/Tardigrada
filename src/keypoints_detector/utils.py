@@ -62,3 +62,7 @@ def tensor2rgb(img):
     img = (img[0].numpy() * 255).astype(np.uint8)
     img = np.swapaxes(img, 0, 1)
     return np.swapaxes(img, 1, 2)
+
+
+def calc_dist(pt1, pt2):
+    return np.sqrt(np.sum(np.square(pt1 - pt2)))

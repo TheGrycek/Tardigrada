@@ -1,18 +1,18 @@
 import random
+from collections import OrderedDict
 from pathlib import Path
 from time import time, strftime, gmtime
 
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.optim.lr_scheduler as lr_scheduler
 import torchvision.utils
 from torch.utils.tensorboard import SummaryWriter
+
 import config as cfg
 from dataset import load_data
 from model import keypoint_detector
-from collections import OrderedDict
-
-import matplotlib.pyplot as plt  # TODO: matplotlib must be imported after torchvision model to avoid SIGSEGV error!
 
 seed = 123
 random.seed(seed)
@@ -109,21 +109,15 @@ def train(images_path, annotation_path, device, save_plots_matplotlib=True, prin
     img_example, target_example = (iter(dataloaders["val"])).next()
     add_tensorboard_image(img_example)
 
-    losses_names = [
-        "train_loss_total",
-        "train_loss_classifier",
-        "train_loss_box_reg",
-        "train_loss_keypoint",
-        "train_loss_objectness",
-        "train_loss_rpn_box_reg",
-        "val_loss_total",
-        "val_loss_classifier",
-        "val_loss_box_reg",
-        "val_loss_keypoint",
-        "val_loss_objectness",
-        "val_loss_rpn_box_reg"
+    names = [
+        "loss_total",
+        "loss_classifier",
+        "loss_box_reg",
+        "loss_keypoint",
+        "loss_objectness",
+        "loss_rpn_box_reg"
     ]
-
+    losses_names = [stage + name for stage in ["train_", "val_"] for name in names]
     losses = OrderedDict({key: [] for key in losses_names})
 
     start_total = time()
@@ -135,7 +129,6 @@ def train(images_path, annotation_path, device, save_plots_matplotlib=True, prin
         for i, (imgs, targets) in enumerate(dataloaders["train"]):
             train_one_epoch(model, device, imgs, targets, optimizer, scheduler, epoch_losses, losses_names)
 
-        # validate using training mode, since batch-norm layers are frozen
         with torch.no_grad():
             for i, (imgs, targets) in enumerate(dataloaders["val"]):
                 validate(model, device, imgs, targets, epoch_losses, losses_names)

@@ -11,11 +11,7 @@ import src.keypoints_detector.config as cfg
 from src.keypoints_detector.model import keypoint_detector
 from src.keypoints_detector.predict import predict
 from src.scale_detector.scale_detector import read_scale
-from collections import defaultdict
-
-
-def calc_dist(pt1, pt2):
-    return np.sqrt(np.sum(np.square(pt1 - pt2)))
+from src.keypoints_detector.utils import calc_dist
 
 
 def fit_polynomial(bbox, points, keypoints_num):
