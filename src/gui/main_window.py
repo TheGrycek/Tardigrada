@@ -1,14 +1,16 @@
 from collections import OrderedDict, defaultdict
 from pathlib import Path
 from queue import Queue
+from random import randint
 from threading import Thread
 
 import ujson
 from PyQt5 import QtGui
 from PyQt5 import uic
 from PyQt5.QtCore import QThread, pyqtSignal, QEvent, Qt
-from PyQt5.QtWidgets import QFileDialog, QTextEdit, QMainWindow, QGraphicsScene, QGraphicsPixmapItem, QGraphicsItem, \
-    QDialog
+from PyQt5.QtWidgets import QGraphicsScene, QGraphicsPixmapItem, QGraphicsItem, QGraphicsItemGroup, \
+    QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsTextItem, QGraphicsWidget
+from PyQt5.QtWidgets import QMainWindow, QDialog, QFileDialog, QTextEdit
 
 
 class MsgWorker(QThread):
@@ -30,25 +32,11 @@ class InstanceWindow(QDialog):
         uic.loadUi("./gui/instance_window.ui", self)
 
 
-class ImageObject:
-    def __init__(self, name, bbox, keypoints=None, extra_data=None):
-        self.category_name = name
-        self.bbox = bbox
+class TardigradeItem(QGraphicsWidget):
+    def __init__(self, parent, rectangle, keypoints):
+        super(TardigradeItem, self).__init__(parent)
+        self.rectangle = rectangle
         self.keypoints = keypoints
-        self.extra_data = extra_data
-
-    def update_extra_data(self, data):
-        self.extra_data = data
-
-    def update_points(self, pts: list):
-        for i, pt in enumerate(pts):
-            self.keypoints[i + 1] = pt
-
-    def update_box(self, bbox: list):
-        self.bbox = bbox
-
-    def update_name(self, name: str):
-        self.category_name = name
 
 
 class UI(QMainWindow):
@@ -75,12 +63,7 @@ class UI(QMainWindow):
         self.start_msg_thread()
 
         self.point_size = 5
-        self.pen_red = QtGui.QPen(Qt.red)
-        self.brush_red = QtGui.QBrush(Qt.red)
-        self.pen_blue = QtGui.QPen(Qt.blue)
-        self.brush_transparent = QtGui.QBrush(Qt.transparent)
         self.connect_widgets()
-        self.image_objects = OrderedDict()
         self.category_names = OrderedDict({'eutardigrada black': 'eutar_bla',
                                            'heterotardigrada echiniscus': 'heter_ech',
                                            'eutardigrada translucent': 'eutar_tra',
@@ -124,9 +107,9 @@ class UI(QMainWindow):
         for ext in images_extensions:
             ext_paths = list(self._folder_path_in.glob(f"*.{ext}"))
             self.images_paths.extend(ext_paths)
-            for pt in ext_paths:
-                self.imagesListWidget.addItem(str(pt))
-                self.set_scene(pt, i)
+            for pth in ext_paths:
+                self.imagesListWidget.addItem(str(pth))
+                self.set_scene(pth, i)
                 i += 1
 
     def select_folder_out(self):
@@ -144,49 +127,70 @@ class UI(QMainWindow):
             return False
         return True
 
+    def create_items_group(self, position, image_data, label_txt, item_type="rect", pen_colour=Qt.blue,
+                           brush_colour=None):
+        item_data = {"label": label_txt,
+                     "value": image_data}
+        item = QGraphicsItemGroup()
+        item.setData(0, item_data)
+        if item_type == "rect":
+            x1, y1, x2, y2 = position
+            elem = QGraphicsRectItem(x1, y1, abs(x2 - x1), abs(y2 - y1))
+        else:
+            elem = QGraphicsEllipseItem(position[0], position[1], self.point_size, self.point_size)
+
+        elem.setPen(QtGui.QPen(Qt.transparent if pen_colour is None else pen_colour))
+        elem.setBrush(QtGui.QBrush(Qt.transparent if brush_colour is None else brush_colour))
+        label = QGraphicsTextItem()
+        label.setPlainText(label_txt)
+        label.setDefaultTextColor(pen_colour)
+        label.setPos(position[0], position[1])
+        [item.addToGroup(it) for it in (elem, label)]
+        item.setFlag(QGraphicsItem.ItemIsMovable)
+        item.setFlag(QGraphicsItem.ItemIsSelectable)
+        item.setCursor(Qt.CrossCursor)
+        return item
+
+    def add_rect(self, bbox, class_name, data=None, colour=Qt.blue):
+        rect_item = self.create_items_group(bbox, data, class_name, item_type="rect", pen_colour=colour)
+        self.scene.addItem(rect_item)
+        return rect_item
+
+    def add_pt(self, pt, label_num, colour=Qt.blue):
+        pt_item = self.create_items_group(pt, None, f"{label_num + 1}", item_type="point",
+                                          pen_colour=colour, brush_colour=colour)
+        self.scene.addItem(pt_item)
+        return pt_item
+
+    @staticmethod
+    def random_qt_colour():
+        colour = QtGui.QColor()
+        colour.setRgb(*[randint(50, 255) for _ in range(3)])
+        return colour
+
     def download_img_data(self, img_path):
-        # TODO: create exception for no file
         data_path = img_path.parent / (img_path.stem + ".json")
-        self.image_objects = OrderedDict()
         if data_path.is_file():
             self.image_data = ujson.load(data_path.open("rb"))
-            # scale
-            scale_bbox = self.create_qtobjects("scale", self.image_data)
-            self.image_objects["scale"] = ImageObject("scale", scale_bbox,
-                                                      extra_data={"scale_value": self.image_data["scale_value"]})
-            # tardigrades
+            colour = self.random_qt_colour()
+            self.add_rect(self.image_data["scale_bbox"], "scale", self.image_data["scale_value"], colour=colour)
             category_list = list(self.category_names.values())
             for i, annot in enumerate(self.image_data["annotations"]):
-                tard_bbox, tard_pts = self.create_qtobjects("tardigrade", annot)
-                self.image_objects[f"tard_{i}"] = ImageObject(category_list[annot["label"] - 1], tard_bbox, tard_pts)
-
-    def create_qtobjects(self, name, data):
-        if name == "scale":
-            return self.daw_element(data["scale_bbox"], elem_type="rectangle")
-        if name == "tardigrade":
-            bbox = self.daw_element(data["bbox"], elem_type="rectangle")
-            pts = [self.daw_element(pt, elem_type="point") for pt in data["keypoints"]]
-            return bbox, pts
-
-    @staticmethod
-    def get_rect_position(obj):
-        rect_obj = obj.shape().controlPointRect()
-        return [rect_obj.topLeft().x(), rect_obj.topLeft().y(),
-                rect_obj.bottomRight().x(), rect_obj.bottomRight().y()]
+                colour = self.random_qt_colour()
+                class_name = category_list[annot["label"] - 1]
+                bbox, kpts = annot["bbox"], annot["keypoints"]
+                rect_item = self.add_rect(bbox, class_name, colour=colour)
+                points = [self.add_pt(pt, i, colour=colour) for i, pt in enumerate(kpts)]
+                tard_item = TardigradeItem(None, rect_item, points)
+                tard_item.setData(0, {"label": class_name,
+                                      "value": i})
+                self.scene.addItem(tard_item)
 
     @staticmethod
-    def get_point_position(obj):
-        pt_obj = obj.shape().controlPointRect()
-        return [pt_obj.x(), pt_obj.y()]
-
-    def draw_img_data(self):
-        for name, obj in self.image_objects.items():
-            if name == "scale":
-                self.daw_element(self.get_rect_position(obj.bbox), elem_type="rectangle")
-            else:
-                self.daw_element(self.get_rect_position(obj.bbox), elem_type="rectangle")
-                for pt in obj.keypoints:
-                    self.daw_element(self.get_point_position(pt), elem_type="point")
+    def get_position(obj):
+        x1, y1, x2, y2 = obj.shape().controlPointRect().getCoords()
+        dx, dy = obj.scenePos().x(), obj.scenePos().y()
+        return [x1 + dx, y1 + dy, x2 + dx, y2 + dy]
 
     def set_scene(self, img_path: Path, img_num=None):
         self.initialize_scene()
@@ -266,8 +270,7 @@ class UI(QMainWindow):
         return super().eventFilter(source, event)
 
     def daw_element(self, data: list, elem_type="point"):
-        # TODO: moving does not update QGraphicsItem object position in self.image_objects
-        #  reimplement event handler using mouseReleaseEvent and mousePressEvent
+        # TODO: Modify this function
         if elem_type == "point":
             x, y = data
             pos_x = round(x - self.point_size / 2)
@@ -294,8 +297,8 @@ class UI(QMainWindow):
             self.create_object_instance(self.category_names[instance_class])
 
     def create_object_instance(self, class_name):
-        new_object = ImageObject(class_name, None)
         # TODO finish this function
+        pass
 
     def save_points(self):
         img_path = self.images_paths[self.current_image]
@@ -304,16 +307,17 @@ class UI(QMainWindow):
         category_list = list(self.category_names.values())
         annotations = []
 
-        for name, obj in self.image_objects.items():
-            if name == "scale":
-                img_data["scale_value"] = obj.extra_data["scale_value"]
-                img_data["scale_bbox"] = self.get_rect_position(obj.bbox)
-            else:
+        for item in self.scene.items():
+            if isinstance(item, TardigradeItem):
+                bbox = self.get_position(item.rectangle)
+                kpts = [self.get_position(pt)[:2] for pt in item.keypoints]
                 annotations.append({
-                    "label": category_list.index(obj.category_name) + 1,
-                    "bbox": self.get_rect_position(obj.bbox),
-                    "keypoints": [self.get_point_position(pt) for pt in obj.keypoints]
-                })
+                    "label": category_list.index(item.data(0)["label"]) + 1,
+                    "bbox": bbox,
+                    "keypoints": kpts})
+            elif item.data(0) is not None and item.data(0)["label"] == "scale":
+                img_data["scale_value"] = item.data(0)["value"]
+                img_data["scale_bbox"] = self.get_position(item)
 
         img_data["annotations"] = annotations
         ujson.dump(img_data, data_path.open("w"))
