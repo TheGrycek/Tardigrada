@@ -1,9 +1,11 @@
+import random
 from collections import OrderedDict, defaultdict
 from pathlib import Path
 from queue import Queue
 from random import randint
 from threading import Thread
 
+import numpy as np
 import ujson
 from PyQt5 import QtGui
 from PyQt5 import uic
@@ -38,6 +40,18 @@ class TardigradeItem(QGraphicsWidget):
         self.rectangle = rectangle
         self.keypoints = keypoints
 
+    def set_rectangle(self, rectangle):
+        self.rectangle = rectangle
+
+    def set_keypoints(self, keypoints):
+        self.keypoints = keypoints
+
+    def get_rectangle(self):
+        return self.rectangle
+
+    def get_keypoints(self):
+        return self.keypoints
+
 
 class UI(QMainWindow):
     def __init__(self):
@@ -61,6 +75,8 @@ class UI(QMainWindow):
         self.images_paths = []
         self.msg_queue = Queue()
         self.start_msg_thread()
+        self.follow_mouse = False
+        self.setMouseTracking(True)
 
         self.point_size = 5
         self.connect_widgets()
@@ -129,27 +145,41 @@ class UI(QMainWindow):
 
     def create_items_group(self, position, image_data, label_txt, item_type="rect", pen_colour=Qt.blue,
                            brush_colour=None):
-        item_data = {"label": label_txt,
-                     "value": image_data}
-        item = QGraphicsItemGroup()
-        item.setData(0, item_data)
-        if item_type == "rect":
-            x1, y1, x2, y2 = position
-            elem = QGraphicsRectItem(x1, y1, abs(x2 - x1), abs(y2 - y1))
-        else:
-            elem = QGraphicsEllipseItem(position[0], position[1], self.point_size, self.point_size)
-
-        elem.setPen(QtGui.QPen(Qt.transparent if pen_colour is None else pen_colour))
-        elem.setBrush(QtGui.QBrush(Qt.transparent if brush_colour is None else brush_colour))
         label = QGraphicsTextItem()
         label.setPlainText(label_txt)
         label.setDefaultTextColor(pen_colour)
         label.setPos(position[0], position[1])
-        [item.addToGroup(it) for it in (elem, label)]
-        item.setFlag(QGraphicsItem.ItemIsMovable)
-        item.setFlag(QGraphicsItem.ItemIsSelectable)
-        item.setCursor(Qt.CrossCursor)
-        return item
+        label.setFlag(QGraphicsItem.ItemIsMovable)
+        label.setFlag(QGraphicsItem.ItemIsSelectable)
+        label.setCursor(Qt.CrossCursor)
+
+        def set_settings():
+            elem.setData(0, {"label": label_txt,
+                             "value": image_data})
+            elem.setPen(QtGui.QPen(Qt.transparent if pen_colour is None else pen_colour))
+            elem.setBrush(QtGui.QBrush(Qt.transparent if brush_colour is None else brush_colour))
+            elem.setFlag(QGraphicsItem.ItemIsMovable)
+            elem.setFlag(QGraphicsItem.ItemIsSelectable)
+            elem.setCursor(Qt.CrossCursor)
+
+        if item_type == "rect":
+            x1, y1, x2, y2 = position
+            elem = QGraphicsRectItem(x1, y1, abs(x2 - x1), abs(y2 - y1))
+            set_settings()
+            label.setParentItem(elem)
+
+            return elem
+
+        else:
+            item = QGraphicsItemGroup()
+            elem = QGraphicsEllipseItem(position[0], position[1], self.point_size, self.point_size)
+            set_settings()
+            [item.addToGroup(it) for it in (elem, label)]
+            item.setFlag(QGraphicsItem.ItemIsMovable)
+            item.setFlag(QGraphicsItem.ItemIsSelectable)
+            item.setCursor(Qt.CrossCursor)
+
+            return item
 
     def add_rect(self, bbox, class_name, data=None, colour=Qt.blue):
         rect_item = self.create_items_group(bbox, data, class_name, item_type="rect", pen_colour=colour)
@@ -171,6 +201,7 @@ class UI(QMainWindow):
     def download_img_data(self, img_path):
         data_path = img_path.parent / (img_path.stem + ".json")
         if data_path.is_file():
+            random.seed(self.current_image)
             self.image_data = ujson.load(data_path.open("rb"))
             colour = self.random_qt_colour()
             self.add_rect(self.image_data["scale_bbox"], "scale", self.image_data["scale_value"], colour=colour)
@@ -188,18 +219,24 @@ class UI(QMainWindow):
 
     @staticmethod
     def get_position(obj):
-        x1, y1, x2, y2 = obj.shape().controlPointRect().getCoords()
-        dx, dy = obj.scenePos().x(), obj.scenePos().y()
-        return [x1 + dx, y1 + dy, x2 + dx, y2 + dy]
+        if isinstance(obj, QGraphicsRectItem):
+            x1, y1, x2, y2 = obj.rect().getCoords()
+            return [x1, y1, x2, y2]
+
+        elif isinstance(obj, QGraphicsItemGroup):
+            # TODO: check if this needs to be shifted by the ellipse radius
+            x1, y1, x2, y2 = obj.shape().controlPointRect().getCoords()
+            dx, dy = obj.scenePos().x(), obj.scenePos().y()
+            return [x1 + dx, y1 + dy, x2 + dx, y2 + dy]
 
     def set_scene(self, img_path: Path, img_num=None):
+        if img_num is not None:
+            self.current_image = img_num
         self.initialize_scene()
         self.download_img_data(img_path)
         img = QtGui.QPixmap(str(img_path))
         self.pixmap.setPixmap(img)
         self.graphicsView.setScene(self.scene)
-        if img_num is not None:
-            self.current_image = img_num
 
     def inference_worker(self, stop):
         pass
@@ -256,6 +293,22 @@ class UI(QMainWindow):
             self.update_img()
 
     def eventFilter(self, source, event):
+        if event.type() == QEvent.MouseMove:
+            if self.follow_mouse:
+                pos = self.graphicsView.mapToScene(event.pos())
+                x2, y2 = pos.x(), pos.y()
+                items = self.scene.selectedItems()
+                if len(items) > 0:
+                    if isinstance(items[0], QGraphicsRectItem):
+                        x1, y1 = self.get_position(items[0])[:2]
+                        items[0].setRect(x1, y1, np.clip(x2 - x1, 0, np.inf), np.clip(y2 - y1, 0, np.inf))
+                        self.update()
+
+        if source == self.graphicsView.viewport() and event.type() == QEvent.MouseButtonDblClick:
+            self.follow_mouse = True
+        if event.type() == QEvent.MouseButtonPress and self.follow_mouse:
+            self.follow_mouse = False
+
         if event.type() == QEvent.Wheel and source == self.graphicsView.viewport() and \
                 event.modifiers() == Qt.ControlModifier:
             scale = 1.20 if event.angleDelta().y() > 0 else 0.8
@@ -309,8 +362,9 @@ class UI(QMainWindow):
 
         for item in self.scene.items():
             if isinstance(item, TardigradeItem):
-                bbox = self.get_position(item.rectangle)
-                kpts = [self.get_position(pt)[:2] for pt in item.keypoints]
+                # TODO: fix position for moved rect items
+                bbox = self.get_position(item.get_rectangle())
+                kpts = [self.get_position(pt)[:2] for pt in item.get_keypoints()]
                 annotations.append({
                     "label": category_list.index(item.data(0)["label"]) + 1,
                     "bbox": bbox,
