@@ -35,16 +35,14 @@ class InstanceWindow(QDialog):
 
 
 class TardigradeItem(QGraphicsWidget):
-    def __init__(self, parent, rectangle, keypoints):
-        super(TardigradeItem, self).__init__(parent)
+    def __init__(self, label, rectangle, keypoints):
+        super(TardigradeItem, self).__init__()
+        self.label = label
         self.rectangle = rectangle
         self.keypoints = keypoints
 
-    def set_rectangle(self, rectangle):
-        self.rectangle = rectangle
-
-    def set_keypoints(self, keypoints):
-        self.keypoints = keypoints
+    def get_label(self):
+        return self.label
 
     def get_rectangle(self):
         return self.rectangle
@@ -153,6 +151,7 @@ class UI(QMainWindow):
         label.setFlag(QGraphicsItem.ItemIsSelectable)
         label.setCursor(Qt.CrossCursor)
 
+
         def set_settings():
             elem.setData(0, {"label": label_txt,
                              "value": image_data})
@@ -167,8 +166,7 @@ class UI(QMainWindow):
             elem = QGraphicsRectItem(x1, y1, abs(x2 - x1), abs(y2 - y1))
             set_settings()
             label.setParentItem(elem)
-
-            return elem
+            return elem, label
 
         else:
             item = QGraphicsItemGroup()
@@ -178,13 +176,12 @@ class UI(QMainWindow):
             item.setFlag(QGraphicsItem.ItemIsMovable)
             item.setFlag(QGraphicsItem.ItemIsSelectable)
             item.setCursor(Qt.CrossCursor)
-
             return item
 
     def add_rect(self, bbox, class_name, data=None, colour=Qt.blue):
-        rect_item = self.create_items_group(bbox, data, class_name, item_type="rect", pen_colour=colour)
+        rect_item, label = self.create_items_group(bbox, data, class_name, item_type="rect", pen_colour=colour)
         self.scene.addItem(rect_item)
-        return rect_item
+        return rect_item, label
 
     def add_pt(self, pt, label_num, colour=Qt.blue):
         pt_item = self.create_items_group(pt, None, f"{label_num + 1}", item_type="point",
@@ -210,20 +207,21 @@ class UI(QMainWindow):
                 colour = self.random_qt_colour()
                 class_name = category_list[annot["label"] - 1]
                 bbox, kpts = annot["bbox"], annot["keypoints"]
-                rect_item = self.add_rect(bbox, class_name, colour=colour)
+                rect_item, label = self.add_rect(bbox, class_name, colour=colour)
                 points = [self.add_pt(pt, i, colour=colour) for i, pt in enumerate(kpts)]
-                tard_item = TardigradeItem(None, rect_item, points)
+                tard_item = TardigradeItem(label, rect_item, points)
                 tard_item.setData(0, {"label": class_name,
                                       "value": i})
                 self.scene.addItem(tard_item)
 
     @staticmethod
-    def get_position(obj):
-        if isinstance(obj, QGraphicsRectItem):
+    def get_position(obj, resize=False):
+        dx, dy = obj.scenePos().x(), obj.scenePos().y()
+        if resize:
             x1, y1, x2, y2 = obj.rect().getCoords()
-            return [x1, y1, x2, y2]
+            return [x1, y1, dx, dy]
 
-        elif isinstance(obj, QGraphicsItemGroup):
+        elif any(isinstance(obj, class_item) for class_item in (QGraphicsRectItem, QGraphicsItemGroup)):
             # TODO: check if this needs to be shifted by the ellipse radius
             x1, y1, x2, y2 = obj.shape().controlPointRect().getCoords()
             dx, dy = obj.scenePos().x(), obj.scenePos().y()
@@ -292,20 +290,38 @@ class UI(QMainWindow):
             self.current_image -= 1
             self.update_img()
 
+    def check_for_item(self, item_class):
+        items = self.scene.selectedItems()
+        if len(items) > 0:
+            item = items[0]
+            if isinstance(item, item_class):
+                return item
+        return False
+
     def eventFilter(self, source, event):
-        if event.type() == QEvent.MouseMove:
-            if self.follow_mouse:
-                pos = self.graphicsView.mapToScene(event.pos())
-                x2, y2 = pos.x(), pos.y()
-                items = self.scene.selectedItems()
-                if len(items) > 0:
-                    if isinstance(items[0], QGraphicsRectItem):
-                        x1, y1 = self.get_position(items[0])[:2]
-                        items[0].setRect(x1, y1, np.clip(x2 - x1, 0, np.inf), np.clip(y2 - y1, 0, np.inf))
-                        self.update()
+        if event.type() == QEvent.MouseMove and self.follow_mouse:
+            mouse_pos = self.graphicsView.mapToScene(event.pos())
+            mouse_x, mouse_y = mouse_pos.x(), mouse_pos.y()
+            item = self.check_for_item(QGraphicsRectItem)
+            if item:
+                (x1, y1, dx, dy) = self.get_position(item, resize=True)
+                # TODO: clip to max image size
+                item.setRect(x1, y1, np.clip(mouse_x - x1 - dx, 10, np.inf), np.clip(mouse_y - y1 - dy, 10, np.inf))
+                self.update()
+
+        if event.type() == QEvent.MouseButtonDblClick and not self.follow_mouse:
+            item = self.check_for_item(QGraphicsTextItem)
+            if item:
+                text = item.toPlainText()
+                cat_list = list(self.category_names.values())
+                cat_num = cat_list.index(text)
+                new_text = cat_list[cat_num + 1] if cat_num + 1 < len(cat_list) else cat_list[0]
+                item.setPlainText(new_text)
+                self.update()
 
         if source == self.graphicsView.viewport() and event.type() == QEvent.MouseButtonDblClick:
             self.follow_mouse = True
+
         if event.type() == QEvent.MouseButtonPress and self.follow_mouse:
             self.follow_mouse = False
 
@@ -363,12 +379,11 @@ class UI(QMainWindow):
         for item in self.scene.items():
             if isinstance(item, TardigradeItem):
                 # TODO: fix position for moved rect items
-                bbox = self.get_position(item.get_rectangle())
-                kpts = [self.get_position(pt)[:2] for pt in item.get_keypoints()]
                 annotations.append({
-                    "label": category_list.index(item.data(0)["label"]) + 1,
-                    "bbox": bbox,
-                    "keypoints": kpts})
+                    "label": category_list.index(item.get_label().toPlainText()) + 1,
+                    "bbox": self.get_position(item.get_rectangle()),
+                    "keypoints": [self.get_position(pt)[:2] for pt in item.get_keypoints()]})
+
             elif item.data(0) is not None and item.data(0)["label"] == "scale":
                 img_data["scale_value"] = item.data(0)["value"]
                 img_data["scale_bbox"] = self.get_position(item)
