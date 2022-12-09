@@ -41,6 +41,12 @@ class TardigradeItem(QGraphicsWidget):
         self.rectangle = rectangle
         self.keypoints = keypoints
 
+        for kpt in keypoints:
+            kpt.setData(1, self)
+
+        label.setData(1, self)
+        rectangle.setData(1, self)
+
     def get_label(self):
         return self.label
 
@@ -51,6 +57,7 @@ class TardigradeItem(QGraphicsWidget):
         return self.keypoints
 
 
+# TODO: consider dividing into two smaller classes
 class UI(QMainWindow):
     def __init__(self):
         super(UI, self).__init__()
@@ -73,8 +80,11 @@ class UI(QMainWindow):
         self.images_paths = []
         self.msg_queue = Queue()
         self.start_msg_thread()
-        self.follow_mouse = False
+        self.follow_mouse_flag = False
+        self.create_instance_flag = False
         self.setMouseTracking(True)
+        self.tard_num = 0
+        self.memory_item = None
 
         self.point_size = 5
         self.connect_widgets()
@@ -91,6 +101,7 @@ class UI(QMainWindow):
     def connect_widgets(self):
         self.actionOpen_Dir.triggered.connect(self.select_folder_in)
         self.actionChange_Save_Dir.triggered.connect(self.select_folder_out)
+        self.actionSave.setShortcut(QtGui.QKeySequence("Ctrl+s"))
         self.actionSave.triggered.connect(self.save_points)
         # control tab
         self.inferenceButton.pressed.connect(self.start_inference)
@@ -112,7 +123,18 @@ class UI(QMainWindow):
         self.msg_thread.msg_signal.connect(self.textbox_print_msg)
         self.msg_thread.start()
 
+    def set_scene(self, img_path: Path, img_num=None):
+        if img_num is not None:
+            self.current_image = img_num
+        self.initialize_scene()
+        self.download_img_data(img_path)
+        img = QtGui.QPixmap(str(img_path))
+        self.pixmap.setPixmap(img)
+        self.graphicsView.setScene(self.scene)
+
     def select_folder_in(self):
+        self.images_paths = []
+        self.imagesListWidget.clear()
         path = "" if self._folder_path_in is None else self._folder_path_in
         self._folder_path_in = Path(QFileDialog.getExistingDirectory(self, "Choose input directory", str(path)))
 
@@ -141,101 +163,6 @@ class UI(QMainWindow):
             return False
         return True
 
-    def create_items_group(self, position, image_data, label_txt, item_type="rect", pen_colour=Qt.blue,
-                           brush_colour=None):
-        label = QGraphicsTextItem()
-        label.setPlainText(label_txt)
-        label.setDefaultTextColor(pen_colour)
-        label.setPos(position[0], position[1])
-        label.setFlag(QGraphicsItem.ItemIsMovable)
-        label.setFlag(QGraphicsItem.ItemIsSelectable)
-        label.setCursor(Qt.CrossCursor)
-
-
-        def set_settings():
-            elem.setData(0, {"label": label_txt,
-                             "value": image_data})
-            elem.setPen(QtGui.QPen(Qt.transparent if pen_colour is None else pen_colour))
-            elem.setBrush(QtGui.QBrush(Qt.transparent if brush_colour is None else brush_colour))
-            elem.setFlag(QGraphicsItem.ItemIsMovable)
-            elem.setFlag(QGraphicsItem.ItemIsSelectable)
-            elem.setCursor(Qt.CrossCursor)
-
-        if item_type == "rect":
-            x1, y1, x2, y2 = position
-            elem = QGraphicsRectItem(x1, y1, abs(x2 - x1), abs(y2 - y1))
-            set_settings()
-            label.setParentItem(elem)
-            return elem, label
-
-        else:
-            item = QGraphicsItemGroup()
-            elem = QGraphicsEllipseItem(position[0], position[1], self.point_size, self.point_size)
-            set_settings()
-            [item.addToGroup(it) for it in (elem, label)]
-            item.setFlag(QGraphicsItem.ItemIsMovable)
-            item.setFlag(QGraphicsItem.ItemIsSelectable)
-            item.setCursor(Qt.CrossCursor)
-            return item
-
-    def add_rect(self, bbox, class_name, data=None, colour=Qt.blue):
-        rect_item, label = self.create_items_group(bbox, data, class_name, item_type="rect", pen_colour=colour)
-        self.scene.addItem(rect_item)
-        return rect_item, label
-
-    def add_pt(self, pt, label_num, colour=Qt.blue):
-        pt_item = self.create_items_group(pt, None, f"{label_num + 1}", item_type="point",
-                                          pen_colour=colour, brush_colour=colour)
-        self.scene.addItem(pt_item)
-        return pt_item
-
-    @staticmethod
-    def random_qt_colour():
-        colour = QtGui.QColor()
-        colour.setRgb(*[randint(50, 255) for _ in range(3)])
-        return colour
-
-    def download_img_data(self, img_path):
-        data_path = img_path.parent / (img_path.stem + ".json")
-        if data_path.is_file():
-            random.seed(self.current_image)
-            self.image_data = ujson.load(data_path.open("rb"))
-            colour = self.random_qt_colour()
-            self.add_rect(self.image_data["scale_bbox"], "scale", self.image_data["scale_value"], colour=colour)
-            category_list = list(self.category_names.values())
-            for i, annot in enumerate(self.image_data["annotations"]):
-                colour = self.random_qt_colour()
-                class_name = category_list[annot["label"] - 1]
-                bbox, kpts = annot["bbox"], annot["keypoints"]
-                rect_item, label = self.add_rect(bbox, class_name, colour=colour)
-                points = [self.add_pt(pt, i, colour=colour) for i, pt in enumerate(kpts)]
-                tard_item = TardigradeItem(label, rect_item, points)
-                tard_item.setData(0, {"label": class_name,
-                                      "value": i})
-                self.scene.addItem(tard_item)
-
-    @staticmethod
-    def get_position(obj, resize=False):
-        dx, dy = obj.scenePos().x(), obj.scenePos().y()
-        if resize:
-            x1, y1, x2, y2 = obj.rect().getCoords()
-            return [x1, y1, dx, dy]
-
-        elif any(isinstance(obj, class_item) for class_item in (QGraphicsRectItem, QGraphicsItemGroup)):
-            # TODO: check if this needs to be shifted by the ellipse radius
-            x1, y1, x2, y2 = obj.shape().controlPointRect().getCoords()
-            dx, dy = obj.scenePos().x(), obj.scenePos().y()
-            return [x1 + dx, y1 + dy, x2 + dx, y2 + dy]
-
-    def set_scene(self, img_path: Path, img_num=None):
-        if img_num is not None:
-            self.current_image = img_num
-        self.initialize_scene()
-        self.download_img_data(img_path)
-        img = QtGui.QPixmap(str(img_path))
-        self.pixmap.setPixmap(img)
-        self.graphicsView.setScene(self.scene)
-
     def inference_worker(self, stop):
         pass
 
@@ -252,7 +179,7 @@ class UI(QMainWindow):
                                                args=(lambda: self.stop_proc_threads_flag,))
                 self.inference_thread.start()
                 self.stop_flag = False
-                self.msg_queue.put("Processing started.\n")
+                self.msg_queue.put("Inference started.\n")
 
     def start_calc_mass(self):
         if self.stop_flag:
@@ -261,7 +188,7 @@ class UI(QMainWindow):
                                                args=(lambda: self.stop_proc_threads_flag,))
                 self.mass_calc_thread.start()
                 self.stop_flag = False
-                self.msg_queue.put("Processing started.\n")
+                self.msg_queue.put("Calculating biomass started.\n")
 
     def stop_processing(self):
         if not self.stop_flag:
@@ -298,18 +225,62 @@ class UI(QMainWindow):
                 return item
         return False
 
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Delete:
+            sel_items = self.scene.selectedItems()
+            for item in sel_items:
+                tard_item = item.data(1)
+                if tard_item:
+                    [self.scene.removeItem(pt) for pt in tard_item.get_keypoints()]
+                    self.scene.removeItem(tard_item.get_rectangle())
+                    self.scene.removeItem(tard_item.get_label())
+                    self.scene.removeItem(tard_item)
+
+    def resize_rect(self, event, item):
+        mouse_pos = self.graphicsView.mapToScene(event.pos())
+        mouse_x, mouse_y = mouse_pos.x(), mouse_pos.y()
+        (x1, y1, dx, dy) = self.get_position(item, resize=True)
+        px = (x1, mouse_x - dx)
+        py = (y1, mouse_y - dy)
+        x, y = min(px), min(py)
+        w = np.clip(max(px) - x, 10, np.inf)
+        h = np.clip(max(py) - y, 10, np.inf)
+        # TODO: clip to the max image size
+        item.setRect(x1, y1, w, h)
+        self.update()
+        return x, y, w, h
+
+    def update_keypoints(self, keypoints, rect):
+        x, y, w, h = rect
+        if w > h:
+            l_xs = np.linspace(w * 0.05, w * 0.95, 5).reshape(-1, 1)
+            w_ys = np.linspace(h * 0.2, h * 0.8, 2).reshape(-1, 1)
+            l_ys = np.ones_like(l_xs) * h / 2
+            w_xs = np.ones_like(w_ys) * l_xs[3, 0]
+
+        else:
+            l_ys = np.linspace(h * 0.05, h * 0.95, 5).reshape(-1, 1)
+            w_xs = np.linspace(w * 0.8, w * 0.2, 2).reshape(-1, 1)
+            l_xs = np.ones_like(l_ys) * w / 2
+            w_ys = np.ones_like(w_xs) * l_ys[3, 0]
+
+        l_pts = np.concatenate((l_xs, l_ys), axis=1)
+        w_pts = np.concatenate((w_xs, w_ys), axis=1)
+        new_positions = np.concatenate((l_pts, w_pts))
+        [kpt.setPos(*new_pos) for kpt, new_pos in zip(keypoints, new_positions)]
+        self.update()
+
     def eventFilter(self, source, event):
-        if event.type() == QEvent.MouseMove and self.follow_mouse:
-            mouse_pos = self.graphicsView.mapToScene(event.pos())
-            mouse_x, mouse_y = mouse_pos.x(), mouse_pos.y()
+        if event.type() == QEvent.MouseMove and self.follow_mouse_flag:
             item = self.check_for_item(QGraphicsRectItem)
             if item:
-                (x1, y1, dx, dy) = self.get_position(item, resize=True)
-                # TODO: clip to max image size
-                item.setRect(x1, y1, np.clip(mouse_x - x1 - dx, 10, np.inf), np.clip(mouse_y - y1 - dy, 10, np.inf))
-                self.update()
+                self.resize_rect(event, item)
 
-        if event.type() == QEvent.MouseButtonDblClick and not self.follow_mouse:
+        if event.type() == QEvent.MouseMove and self.create_instance_flag and self.follow_mouse_flag:
+            rect = self.resize_rect(event, self.memory_item.get_rectangle())
+            self.update_keypoints(self.memory_item.get_keypoints(), rect)
+
+        if event.type() == QEvent.MouseButtonDblClick and not self.follow_mouse_flag:
             item = self.check_for_item(QGraphicsTextItem)
             if item:
                 text = item.toPlainText()
@@ -319,11 +290,22 @@ class UI(QMainWindow):
                 item.setPlainText(new_text)
                 self.update()
 
-        if source == self.graphicsView.viewport() and event.type() == QEvent.MouseButtonDblClick:
-            self.follow_mouse = True
+        if event.type() == QEvent.MouseButtonPress and self.create_instance_flag:
+            if self.follow_mouse_flag:
+                self.pixmap.setCursor(Qt.ArrowCursor)
+                self.follow_mouse_flag = False
+                self.create_instance_flag = False
+                self.memory_item = None
+            else:
+                class_name = self.category_names[self.window.comboBox.currentText()]
+                self.create_object_instance(class_name, event)
+                self.follow_mouse_flag = True
 
-        if event.type() == QEvent.MouseButtonPress and self.follow_mouse:
-            self.follow_mouse = False
+        if source == self.graphicsView.viewport() and event.type() == QEvent.MouseButtonDblClick:
+            self.follow_mouse_flag = True
+
+        if event.type() == QEvent.MouseButtonPress and self.follow_mouse_flag and not self.create_instance_flag:
+            self.follow_mouse_flag = False
 
         if event.type() == QEvent.Wheel and source == self.graphicsView.viewport() and \
                 event.modifiers() == Qt.ControlModifier:
@@ -331,43 +313,22 @@ class UI(QMainWindow):
             self.graphicsView.scale(scale, scale)
             return True
 
-        if event.type() == QEvent.MouseButtonPress and source == self.graphicsView.viewport() and \
-                event.modifiers() == Qt.ControlModifier:
-            point = self.graphicsView.mapToScene(event.pos())
-            self.daw_element([point.x(), point.y()], elem_type="point")
-
         return super().eventFilter(source, event)
-
-    def daw_element(self, data: list, elem_type="point"):
-        # TODO: Modify this function
-        if elem_type == "point":
-            x, y = data
-            pos_x = round(x - self.point_size / 2)
-            pos_y = round(y - self.point_size / 2)
-            pt = self.scene.addEllipse(pos_x, pos_y, self.point_size, self.point_size, self.pen_red, self.brush_red)
-            pt.setFlag(QGraphicsItem.ItemIsMovable)
-            pt.setFlag(QGraphicsItem.ItemIsSelectable)
-            return pt
-
-        elif elem_type == "rectangle":
-            x1, y1, x2, y2 = data
-            w = round(abs(x1 - x2))
-            h = round(abs(y1 - y2))
-            rect = self.scene.addRect(round(x1), round(y1), w, h, self.pen_blue, self.brush_transparent)
-            rect.setFlag(QGraphicsItem.ItemIsMovable)
-            rect.setFlag(QGraphicsItem.ItemIsSelectable)
-            return rect
 
     def create_instance(self):
         self.window = InstanceWindow()
         self.window.show()
         if self.window.exec():
-            instance_class = self.window.comboBox.currentText()
-            self.create_object_instance(self.category_names[instance_class])
+            self.create_instance_flag = True
+            self.pixmap.setCursor(Qt.CrossCursor)
 
-    def create_object_instance(self, class_name):
-        # TODO finish this function
-        pass
+    def create_object_instance(self, class_name, event):
+        self.tard_num += 1
+        mouse_pos = self.graphicsView.mapToScene(event.pos())
+        mouse_x, mouse_y = mouse_pos.x(), mouse_pos.y()
+        bbox = [mouse_x, mouse_y, mouse_x + 20, mouse_y + 20]
+        kpts = [[mouse_x, mouse_y] for _ in range(7)]
+        return self.create_tardigrade(class_name, bbox, kpts, self.tard_num)
 
     def save_points(self):
         img_path = self.images_paths[self.current_image]
@@ -390,4 +351,95 @@ class UI(QMainWindow):
 
         img_data["annotations"] = annotations
         ujson.dump(img_data, data_path.open("w"))
-        self.msg_queue.put(f"Changes saved to the file {str(data_path)}.\n")
+        self.msg_queue.put(f"Changes saved to the file: {str(data_path)}.\n")
+
+    def create_items_group(self, position, image_data, label_txt, item_type="rect", pen_colour=Qt.blue,
+                           brush_colour=None):
+        def move_select_cursor(item):
+            item.setFlag(QGraphicsItem.ItemIsMovable)
+            item.setFlag(QGraphicsItem.ItemIsSelectable)
+            item.setCursor(Qt.CrossCursor)
+
+        def item_settings():
+            elem.setData(0, {"label": label_txt,
+                             "value": image_data})
+            elem.setPen(QtGui.QPen(Qt.transparent if pen_colour is None else pen_colour))
+            elem.setBrush(QtGui.QBrush(Qt.transparent if brush_colour is None else brush_colour))
+            move_select_cursor(elem)
+
+        label = QGraphicsTextItem()
+        label.setPlainText(label_txt)
+        label.setDefaultTextColor(pen_colour)
+        label.setPos(position[0], position[1])
+        move_select_cursor(label)
+
+        if item_type == "rect":
+            x1, y1, x2, y2 = position
+            elem = QGraphicsRectItem(x1, y1, abs(x2 - x1), abs(y2 - y1))
+            item_settings()
+            label.setParentItem(elem)
+            return elem, label
+
+        else:
+            item = QGraphicsItemGroup()
+            elem = QGraphicsEllipseItem(position[0], position[1], self.point_size, self.point_size)
+            item_settings()
+            [item.addToGroup(it) for it in (elem, label)]
+            move_select_cursor(item)
+            return item
+
+    def add_rect(self, bbox, class_name, data=None, colour=Qt.blue):
+        rect_item, label = self.create_items_group(bbox, data, class_name, item_type="rect", pen_colour=colour)
+        self.scene.addItem(rect_item)
+        return rect_item, label
+
+    def add_pt(self, pt, label_num, colour=Qt.blue):
+        pt_item = self.create_items_group(pt, None, f"{label_num + 1}", item_type="point",
+                                          pen_colour=colour, brush_colour=colour)
+        self.scene.addItem(pt_item)
+        return pt_item
+
+    @staticmethod
+    def random_qt_colour():
+        colour = QtGui.QColor()
+        colour.setRgb(*[randint(50, 255) for _ in range(3)])
+        return colour
+
+    def create_tardigrade(self, class_name, bbox, kpts, value):
+        colour = self.random_qt_colour()
+        rect_item, label = self.add_rect(bbox, class_name, colour=colour)
+        points = [self.add_pt(pt, i, colour=colour) for i, pt in enumerate(kpts)]
+        tard_item = TardigradeItem(label, rect_item, points)
+        tard_item.setData(0, {"label": class_name,
+                              "value": value})
+        self.scene.addItem(tard_item)
+        self.memory_item = tard_item
+        return tard_item, rect_item, label, points
+
+    def create_scale(self):
+        colour = self.random_qt_colour()
+        self.add_rect(self.image_data["scale_bbox"], "scale", self.image_data["scale_value"], colour=colour)
+
+    def download_img_data(self, img_path):
+        data_path = img_path.parent / (img_path.stem + ".json")
+        if data_path.is_file():
+            random.seed(self.current_image)
+            self.image_data = ujson.load(data_path.open("rb"))
+            self.create_scale()
+            category_list = list(self.category_names.values())
+            for i, annot in enumerate(self.image_data["annotations"]):
+                self.create_tardigrade(category_list[annot["label"] - 1], annot["bbox"], annot["keypoints"], i)
+                self.tard_num += 1
+
+    @staticmethod
+    def get_position(obj, resize=False):
+        dx, dy = obj.scenePos().x(), obj.scenePos().y()
+        if resize:
+            x1, y1, x2, y2 = obj.rect().getCoords()
+            return [x1, y1, dx, dy]
+
+        elif any(isinstance(obj, class_item) for class_item in (QGraphicsRectItem, QGraphicsItemGroup)):
+            # TODO: check if this needs to be shifted by the ellipse radius
+            x1, y1, x2, y2 = obj.shape().controlPointRect().getCoords()
+            dx, dy = obj.scenePos().x(), obj.scenePos().y()
+            return [x1 + dx, y1 + dy, x2 + dx, y2 + dy]
