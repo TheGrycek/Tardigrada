@@ -106,5 +106,6 @@ def read_scale(img, device="cpu"):
     img = cv2.putText(img, 'scale', (x, y), cv2.FONT_HERSHEY_SIMPLEX,
                       1, (255, 0, 0), 2, cv2.LINE_AA)
 
-    output = {"um": scale_value, "bbox": [x, y, w, h]}
+    output = {"um": scale_value, "bbox": [x, y, x + w, y + h]}
+
     return output, img
