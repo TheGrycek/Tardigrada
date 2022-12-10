@@ -85,6 +85,7 @@ class UI(QMainWindow):
         self.setMouseTracking(True)
         self.tard_num = 0
         self.memory_item = None
+        self.memory_rect_pts = None
 
         self.point_size = 5
         self.connect_widgets()
@@ -239,47 +240,87 @@ class UI(QMainWindow):
     def resize_rect(self, event, item):
         mouse_pos = self.graphicsView.mapToScene(event.pos())
         mouse_x, mouse_y = mouse_pos.x(), mouse_pos.y()
-        (x1, y1, dx, dy) = self.get_position(item, resize=True)
-        px = (x1, mouse_x - dx)
-        py = (y1, mouse_y - dy)
-        x, y = min(px), min(py)
-        w = np.clip(max(px) - x, 10, np.inf)
-        h = np.clip(max(py) - y, 10, np.inf)
-        # TODO: clip to the max image size
-        item.setRect(x1, y1, w, h)
+        _, (dx, dy) = self.get_position(item, resize=True)
+        (x1m, y1m, wm, hm) = self.memory_rect_pts
+        cursor_x = mouse_x - dx
+        cursor_y = mouse_y - dy
+        top_left = (x1m, y1m)
+        w = abs(x1m - mouse_x)
+        h = abs(y1m - mouse_y)
+
+        if cursor_x > x1m and cursor_y < y1m:
+            top_left = (x1m, cursor_y)
+        elif cursor_x < x1m and cursor_y < y1m:
+            top_left = (cursor_x, cursor_y)
+        elif cursor_x < x1m and cursor_y > y1m:
+            top_left = (cursor_x, y1m)
+
+        item.setRect(*top_left, w, h)
         self.update()
-        return x, y, w, h
+        return *top_left, w, h
 
     def update_keypoints(self, keypoints, rect):
         x, y, w, h = rect
+        dx = x - self.memory_rect_pts[0]
+        dy = y - self.memory_rect_pts[1]
+
         if w > h:
-            l_xs = np.linspace(w * 0.05, w * 0.95, 5).reshape(-1, 1)
-            w_ys = np.linspace(h * 0.2, h * 0.8, 2).reshape(-1, 1)
-            l_ys = np.ones_like(l_xs) * h / 2
+            l_xs_range = np.array([w * 0.05, w * 0.95])
+            w_ys_range = np.array([(h * 0.2), (h * 0.8)])
+
+            if dx < 0 and dy == 0:
+                l_xs_range *= - 1
+                w_ys_range = w_ys_range[::-1]
+            elif dx < 0 and dy < 0:
+                l_xs_range *= -1
+                w_ys_range *= -1
+            else:
+                w_ys_range += dy
+
+            l_xs = np.linspace(*l_xs_range, 5).reshape(-1, 1)
+            w_ys = np.linspace(*w_ys_range, 2).reshape(-1, 1)
+            l_ys = np.ones_like(l_xs) * (h / 2) + dy
             w_xs = np.ones_like(w_ys) * l_xs[3, 0]
 
         else:
-            l_ys = np.linspace(h * 0.05, h * 0.95, 5).reshape(-1, 1)
-            w_xs = np.linspace(w * 0.8, w * 0.2, 2).reshape(-1, 1)
-            l_xs = np.ones_like(l_ys) * w / 2
+            l_ys_range = np.array([h * 0.05, h * 0.95])
+            w_xs_range = np.array([(w * 0.8), (w * 0.2)])
+
+            if dx == 0 and dy < 0:
+                l_ys_range *= -1
+                w_xs_range = w_xs_range[::-1]
+
+            elif dx < 0 and dy < 0:
+                l_ys_range *= -1
+                w_xs_range *= -1
+            else:
+                w_xs_range += dx
+
+            l_ys = np.linspace(*l_ys_range, 5).reshape(-1, 1)
+            w_xs = np.linspace(*w_xs_range, 2).reshape(-1, 1)
+            l_xs = np.ones_like(l_ys) * (w / 2) + dx
             w_ys = np.ones_like(w_xs) * l_ys[3, 0]
 
         l_pts = np.concatenate((l_xs, l_ys), axis=1)
         w_pts = np.concatenate((w_xs, w_ys), axis=1)
+
         new_positions = np.concatenate((l_pts, w_pts))
         [kpt.setPos(*new_pos) for kpt, new_pos in zip(keypoints, new_positions)]
         self.update()
 
     def eventFilter(self, source, event):
+        # update rectangle position after double click
         if event.type() == QEvent.MouseMove and self.follow_mouse_flag:
             item = self.check_for_item(QGraphicsRectItem)
             if item:
-                self.resize_rect(event, item)
+                rect = self.resize_rect(event, item)
 
+        # update rectangle position after creating new instance
         if event.type() == QEvent.MouseMove and self.create_instance_flag and self.follow_mouse_flag:
             rect = self.resize_rect(event, self.memory_item.get_rectangle())
             self.update_keypoints(self.memory_item.get_keypoints(), rect)
 
+        # update label text
         if event.type() == QEvent.MouseButtonDblClick and not self.follow_mouse_flag:
             item = self.check_for_item(QGraphicsTextItem)
             if item:
@@ -292,25 +333,35 @@ class UI(QMainWindow):
 
         if event.type() == QEvent.MouseButtonPress and self.create_instance_flag:
             if self.follow_mouse_flag:
+                # set new instance rectangle second point position
                 self.pixmap.setCursor(Qt.ArrowCursor)
                 self.follow_mouse_flag = False
                 self.create_instance_flag = False
                 self.memory_item = None
             else:
+                # set new instance rectangle first point position
                 class_name = self.category_names[self.window.comboBox.currentText()]
-                self.create_object_instance(class_name, event)
+                rect_item = self.create_object_instance(class_name, event)[1]
+                self.memory_rect_pts = self.get_position(rect_item)
                 self.follow_mouse_flag = True
 
-        if source == self.graphicsView.viewport() and event.type() == QEvent.MouseButtonDblClick:
+        # set rectangle to be resized by the mouse movement
+        if event.type() == QEvent.MouseButtonDblClick and source == self.graphicsView.viewport():
             self.follow_mouse_flag = True
+            item = self.check_for_item(QGraphicsRectItem)
+            if item:
+                self.memory_rect_pts = self.get_position(item)
 
+        # set rectangle position
         if event.type() == QEvent.MouseButtonPress and self.follow_mouse_flag and not self.create_instance_flag:
             self.follow_mouse_flag = False
 
+        # resize scene view
         if event.type() == QEvent.Wheel and source == self.graphicsView.viewport() and \
                 event.modifiers() == Qt.ControlModifier:
             scale = 1.20 if event.angleDelta().y() > 0 else 0.8
             self.graphicsView.scale(scale, scale)
+            self.update()
             return True
 
         return super().eventFilter(source, event)
@@ -436,7 +487,7 @@ class UI(QMainWindow):
         dx, dy = obj.scenePos().x(), obj.scenePos().y()
         if resize:
             x1, y1, x2, y2 = obj.rect().getCoords()
-            return [x1, y1, dx, dy]
+            return [x1, y1, x2, y2], [dx, dy]
 
         elif any(isinstance(obj, class_item) for class_item in (QGraphicsRectItem, QGraphicsItemGroup)):
             # TODO: check if this needs to be shifted by the ellipse radius
