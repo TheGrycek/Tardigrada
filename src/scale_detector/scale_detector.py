@@ -107,4 +107,5 @@ def read_scale(img, device="cpu"):
                       1, (255, 0, 0), 2, cv2.LINE_AA)
 
     output = {"um": scale_value, "bbox": [x, y, x + w, y + h]}
+
     return output, img

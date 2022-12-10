@@ -9,10 +9,12 @@ import numpy as np
 import ujson
 from PyQt5 import QtGui
 from PyQt5 import uic
-from PyQt5.QtCore import QThread, pyqtSignal, QEvent, Qt
+from PyQt5.QtCore import QEvent, Qt
+from PyQt5.QtCore import QThread, pyqtSignal
+from PyQt5.QtWidgets import QDialog
 from PyQt5.QtWidgets import QGraphicsScene, QGraphicsPixmapItem, QGraphicsItem, QGraphicsItemGroup, \
     QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsTextItem, QGraphicsWidget
-from PyQt5.QtWidgets import QMainWindow, QDialog, QFileDialog, QTextEdit
+from PyQt5.QtWidgets import QPushButton, QFileDialog, QTextEdit, QMainWindow
 
 
 class MsgWorker(QThread):
@@ -148,7 +150,6 @@ class UI(QMainWindow):
         self.imagesListWidget.clear()
         path = "" if self._folder_path_in is None else self._folder_path_in
         self._folder_path_in = Path(QFileDialog.getExistingDirectory(self, "Choose input directory", str(path)))
-
         images_extensions = ("png", "tif", "jpg", "jpeg")
         i = 0
         for ext in images_extensions:

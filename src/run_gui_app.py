@@ -16,7 +16,7 @@ class MainWindow(UI):
         super().__init__()
 
     def inference_worker(self, stop):
-        """runs in self.inference_thread"""
+        """Runs in self.inference_thread"""
         args = namedtuple("args", ["input_dir", "output_dir"])
         args_parsed = args(self._folder_path_in, self._folder_path_out)
         run_inference(args_parsed, self.msg_queue, stop)
@@ -24,7 +24,7 @@ class MainWindow(UI):
         self.stop_proc_threads_flag = False
 
     def calc_mass_worker(self, stop):
-        """runs in self.mass_calc_thread"""
+        """Runs in self.mass_calc_thread"""
         args = namedtuple("args", ["output_dir"])
         args_parsed = args(self._folder_path_out)
         run_calc_mass(args_parsed, self.msg_queue, stop)
