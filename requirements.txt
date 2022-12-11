@@ -5,10 +5,10 @@ scipy
 numpy
 Pillow
 scikit-image
-python-bidi
 PyYAML
 easyocr==1.4.1
 pycocotools
 pandas
 ujson
 ray
+PyQt5

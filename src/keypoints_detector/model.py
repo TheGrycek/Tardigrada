@@ -4,6 +4,7 @@ import torch
 import torch.nn.functional as F
 from torchvision.models.detection import keypointrcnn_resnet50_fpn, rpn
 from torchvision.models.detection.roi_heads import fastrcnn_loss, keypointrcnn_inference, keypoints_to_heatmap
+from torchvision.models.resnet import ResNet50_Weights
 
 
 def keypointrcnn_loss(keypoint_logits, proposals, gt_keypoints, keypoint_matched_idxs):
@@ -136,8 +137,8 @@ def keypoint_detector(num_classes=4, num_keypoints=7, box_nms_thresh=0.50, rpn_s
     anchor_generator = rpn.AnchorGenerator(sizes=(16, 32, 64, 128, 256),
                                            aspect_ratios=(0.125, 0.25, 0.5, 0.75, 1.0, 2.0, 4.0))
 
-    model = keypointrcnn_resnet50_fpn(pretrained=False,
-                                      pretrained_backbone=True,
+    model = keypointrcnn_resnet50_fpn(weights=None,
+                                      weights_backbone=ResNet50_Weights.DEFAULT,
                                       num_classes=num_classes,
                                       num_keypoints=num_keypoints,
                                       box_nms_thresh=box_nms_thresh,
