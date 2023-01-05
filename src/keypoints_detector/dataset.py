@@ -9,9 +9,8 @@ import torchvision.transforms.functional as F
 from pycocotools.coco import COCO
 from torch.utils.data import Dataset, DataLoader
 
-import config as cfg
-from config import KEYPOINTS
-from utils import tensor2rgb
+import src.keypoints_detector.config as cfg
+from src.keypoints_detector.utils import tensor2rgb
 
 seed = 123
 random.seed(123)
@@ -24,7 +23,7 @@ class KeypointsDataset(Dataset):
         self.coco = COCO(annotation_file)
         self.ids = list(sorted(self.coco.imgs.keys()))
         self.transforms = transforms
-        self.points_num = KEYPOINTS
+        self.points_num = cfg.KEYPOINTS
         self.min_area = 100
 
     def __len__(self):
@@ -126,8 +125,8 @@ def load_data(images_dir, annotation_file=cfg.ANNOTATON_FILE,
     dataset_train.transforms = transform
 
     dataloaders = {
-        name: DataLoader(dataset=dataset_, collate_fn=collate_function, batch_size=cfg.BATCH_SIZE,
-                         shuffle=shuffle, num_workers=cfg.NUM_WORKERS, worker_init_fn=seed_worker, generator=generator)
+        name: DataLoader(dataset=dataset_, collate_fn=collate_function, batch_size=cfg.BATCH_SIZE,shuffle=shuffle,
+                         num_workers=cfg.NUM_WORKERS, worker_init_fn=seed_worker, generator=generator)
         for name, dataset_ in zip(["train", "val", "test"], [dataset_train, dataset_val, dataset_test])
     }
 
@@ -136,8 +135,7 @@ def load_data(images_dir, annotation_file=cfg.ANNOTATON_FILE,
 
 def get_normalization_params(images_dir="../images/train", annotation_file=cfg.ANNOTATON_FILE):
     dataset = KeypointsDataset(images_dir=images_dir, annotation_file=annotation_file, transforms=False)
-    dataloader = DataLoader(dataset=dataset, batch_size=cfg.BATCH_SIZE,
-                            shuffle=False)
+    dataloader = DataLoader(dataset=dataset, batch_size=cfg.BATCH_SIZE, shuffle=False)
     mean, std, imgs_num = 0, 0, 0
 
     for imgs, _ in dataloader:

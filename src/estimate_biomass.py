@@ -15,8 +15,8 @@ from scipy.interpolate import splprep, splev
 import keypoints_detector.config as cfg
 from keypoints_detector.model import keypoint_detector
 from keypoints_detector.predict import predict
-from scale_detector.scale_detector import read_scale
 from keypoints_detector.utils import calc_dist
+from scale_detector.scale_detector import read_scale
 
 
 def parse_args():
@@ -242,12 +242,12 @@ def visualize(args):
                       f"Image total mass: {mass_total} ug\n"
                       f"{'-' * 50}")
                 print(F"Image processed: {str(img_path)}\n")
-
-                info_dict = {"scale": (f"Scale: {image_scale['um']} um", (50, 50)),
-                             "number": (f"Animal number: {predicted['bboxes'].shape[0]}", (50, 100)),
-                             "mass": (f"Total biomass: {round(mass_total, 5)} ug", (50, 150)),
-                             "mean": (f"Animal mass mean: {round(mass_mean, 5)} ug", (50, 200)),
-                             "std": (f"Animal mass std: {round(mass_std, 5)} ug", (50, 250))}
+                shift, dec = 50, 5  # shift the text from the border, round to 5 decimal places
+                info_dict = {"scale": (f"Scale: {image_scale['um']} um", (shift, shift)),
+                             "number": (f"Animal number: {predicted['bboxes'].shape[0]}", (shift, 100)),
+                             "mass": (f"Total biomass: {round(mass_total, dec)} ug", (shift, 150)),
+                             "mean": (f"Animal mass mean: {round(mass_mean, dec)} ug", (shift, 200)),
+                             "std": (f"Animal mass std: {round(mass_std, dec)} ug", (shift, 250))}
 
                 for text, position in info_dict.values():
                     img = cv2.putText(img, text, position,
@@ -267,7 +267,7 @@ def visualize(args):
             # cv2.imwrite(str(args.output_dir / f"{img_path.stem}_results.jpg"), img)
 
             cv2.imshow('predicted', cv2.resize(img, (1400, 700)))
-            cv2.waitKey(2500)
+            cv2.waitKey(1500)
 
         except Exception as e:
             print(e)

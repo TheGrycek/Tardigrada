@@ -1,11 +1,16 @@
+from pathlib import Path
+
 import cv2
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torchvision.transforms.functional as F
 
-import keypoints_detector.config as cfg
-from keypoints_detector.model import keypoint_detector
+import src.keypoints_detector.config as cfg
+from src.keypoints_detector.dataset import load_data
+from src.keypoints_detector.model import keypoint_detector
+from src.keypoints_detector.utils import tensor2rgb, calc_oks
+from torchmetrics.detection.mean_ap import MeanAveragePrecision
+from pprint import pprint
 
 
 def predict(model, img, device):
@@ -51,14 +56,42 @@ def predict(model, img, device):
     return output
 
 
-def show_prediction(img):
+def test(images_path, annotation_path, device):
     model = keypoint_detector()
-    model.load_state_dict(torch.load("../keypoints_detector/checkpoints/keypoints_detector_old.pth"))
-    prediction = predict(model, img, cfg.DEVICE)
-    cv2.imwrite("keypoint_rcnn_detection.jpg", prediction["image"])
+    model.load_state_dict(torch.load("./checkpoints/keypoints_detector.pth"))
+    model.eval().to(device)
+    dataloaders = load_data(images_dir=str(images_path), annotation_file=str(annotation_path),
+                            transform=False, val_ratio=cfg.VAL_RATIO, test_ratio=cfg.TEST_RATIO)
+    mAP = MeanAveragePrecision()
+    predictions_, targets_, img_sizes = [], [], []
 
-    plt.figure(figsize=(20, 30))
-    plt.imshow(prediction["image"])
-    plt.xticks([])
-    plt.yticks([])
-    plt.show()
+    with torch.no_grad():
+        for i, (images, targets) in enumerate(dataloaders["test"]):
+            for img, target in zip(images, targets):
+                predicted = model([img.to(device)])[0]
+                img_sizes.append(img.shape[:2])
+
+                predictions_.append(dict(
+                    boxes=predicted["boxes"].cpu().detach(),
+                    scores=predicted["scores"].cpu().detach(),
+                    labels=predicted["labels"].cpu().detach(),
+                    keypoints=predicted["keypoints"].cpu().detach()
+                ))
+
+                targets_.append(dict(
+                    boxes=target["boxes"].cpu().detach().type(torch.float),
+                    labels=target["labels"].cpu().detach(),
+                    keypoints=target["keypoints"].cpu().detach()
+                ))
+
+    mAP.update(predictions_, targets_)
+    results = mAP.compute()
+    results["oks"] = calc_oks(predictions_, targets_, img_sizes)
+    pprint(results)
+
+
+if __name__ == '__main__':
+    images_path = Path("../images/train")
+    annotation_path = Path(cfg.ANNOTATON_FILE)
+    print(f"MY DEVICE: {cfg.DEVICE}")
+    test(images_path, annotation_path, cfg.DEVICE)
