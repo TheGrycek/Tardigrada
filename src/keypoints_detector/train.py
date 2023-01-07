@@ -1,5 +1,3 @@
-import random
-from collections import OrderedDict
 from pathlib import Path
 from time import time, strftime, gmtime
 
@@ -11,23 +9,15 @@ import torchvision.utils
 from torch.utils.tensorboard import SummaryWriter
 
 import config as cfg
-from dataset import load_data
+from dataset import create_dataloaders
 from model import keypoint_detector
+from utils import set_reproducibility_params, create_losses_dict
 
-seed = 123
-random.seed(seed)
-np.random.seed(seed)
-torch.manual_seed(seed)
-torch.cuda.manual_seed(seed)
-torch.cuda.manual_seed_all(seed)
-torch.backends.cudnn.benchmark = False
-torch.backends.cudnn.deterministic = True
-# torch.use_deterministic_algorithms(True)
-
+set_reproducibility_params()
 writer = SummaryWriter("./runs/board_results")
 
 
-def train_one_epoch(model, device, imgs, targets, optimizer, scheduler, epoch_losses, losses_names):
+def train_one_batch(model, device, imgs, targets, optimizer, scheduler, epoch_losses, losses_names):
     img_batch = [img.to(device) for img in imgs]
     targets = [{k: v.to(device) for k, v in target.items()} for target in targets]
 
@@ -37,7 +27,9 @@ def train_one_epoch(model, device, imgs, targets, optimizer, scheduler, epoch_lo
     optimizer.zero_grad()
     loss_total.backward()
     optimizer.step()
-    scheduler.step()
+    if scheduler is not None:
+        scheduler.step()
+
     epoch_losses["train_loss_total"].append(float(loss_total.item()))
     for loss_key in losses_names[1: 6]:
         epoch_losses[loss_key].append(float(loss_dict[loss_key.replace("train_", "")].item()))
@@ -88,10 +80,6 @@ def save_plots_plt(losses):
     plt.show()
 
 
-def calculate_metrics():
-    pass
-
-
 def train(images_path, annotation_path, device, save_plots_matplotlib=True, print_stats_n_epoch=1, export_onnx=True):
     model = keypoint_detector()
     model.to(device)
@@ -100,25 +88,19 @@ def train(images_path, annotation_path, device, save_plots_matplotlib=True, prin
                                 momentum=cfg.MOMENTUM,
                                 weight_decay=cfg.WEIGHT_DECAY)
 
-    dataloaders = load_data(images_dir=str(images_path),
-                            annotation_file=str(annotation_path),
-                            transform=False, val_ratio=cfg.VAL_RATIO, test_ratio=cfg.TEST_RATIO)
+    dataloaders = create_dataloaders(images_dir=str(images_path),
+                                     annotation_file=str(annotation_path),
+                                     val_ratio=cfg.VAL_RATIO,
+                                     test_ratio=cfg.TEST_RATIO)
 
-    scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=cfg.MILESTONES, gamma=cfg.GAMMA)
+    scheduler = lr_scheduler.MultiStepLR(optimizer,
+                                         milestones=cfg.MILESTONES,
+                                         gamma=cfg.GAMMA)
 
     img_example, target_example = (iter(dataloaders["val"])).next()
     add_tensorboard_image(img_example)
 
-    names = [
-        "loss_total",
-        "loss_classifier",
-        "loss_box_reg",
-        "loss_keypoint",
-        "loss_objectness",
-        "loss_rpn_box_reg"
-    ]
-    losses_names = [stage + name for stage in ["train_", "val_"] for name in names]
-    losses = OrderedDict({key: [] for key in losses_names})
+    losses_names, losses = create_losses_dict()
 
     start_total = time()
     model.train()
@@ -127,7 +109,7 @@ def train(images_path, annotation_path, device, save_plots_matplotlib=True, prin
         epoch_losses = {key: [] for key in losses_names}
 
         for i, (imgs, targets) in enumerate(dataloaders["train"]):
-            train_one_epoch(model, device, imgs, targets, optimizer, scheduler, epoch_losses, losses_names)
+            train_one_batch(model, device, imgs, targets, optimizer, scheduler, epoch_losses, losses_names)
 
         with torch.no_grad():
             for i, (imgs, targets) in enumerate(dataloaders["val"]):
@@ -146,7 +128,6 @@ def train(images_path, annotation_path, device, save_plots_matplotlib=True, prin
                   f"validation loss={epoch_losses['val_loss_total'][-1]:.4f}, "
                   f" time: {time() - start_epoch}")
 
-        # calculate_metrics()
         add_tensorboard_scalars(epoch_losses, epoch)
 
     torch.save(model.state_dict(), "checkpoints/keypoints_detector_test.pth")
@@ -157,8 +138,8 @@ def train(images_path, annotation_path, device, save_plots_matplotlib=True, prin
 
     # TODO: fix img_example shape
     # if export_onnx:
-        # torch.onnx.export(model, img_example, "checkpoints/keypoint_rcnn.onnx", verbose=True,
-        #                   input_names=["input"], output_names=["output"])
+    #     torch.onnx.export(model, img_example, "checkpoints/keypoint_rcnn.onnx", verbose=True,
+    #                       input_names=["input"], output_names=["output"])
 
     return model
 
@@ -167,7 +148,4 @@ if __name__ == '__main__':
     images_path = Path("../images/train")
     annotation_path = Path(cfg.ANNOTATON_FILE)
     print(f"MY DEVICE: {cfg.DEVICE}")
-    train(images_path, annotation_path, cfg.DEVICE,
-          save_plots_matplotlib=True,
-          print_stats_n_epoch=1
-          )
+    train(images_path, annotation_path, cfg.DEVICE, save_plots_matplotlib=True, print_stats_n_epoch=1)

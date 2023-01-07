@@ -147,8 +147,8 @@ def keypoint_detector(num_classes=4, num_keypoints=7, box_nms_thresh=0.50, rpn_s
                                       box_score_thresh=box_score_thresh,
                                       rpn_anchor_generator=anchor_generator,
                                       box_detections_per_img=box_detections_per_img,
-                                      # image_mean=[0.466063529253006, 0.5127472281455994, 0.490399032831192],
-                                      # image_std=[0.08915058523416519, 0.09907367825508118, 0.096004918217659]
+                                      image_mean=[0.466063529253006, 0.5127472281455994, 0.490399032831192],
+                                      image_std=[0.08915058523416519, 0.09907367825508118, 0.096004918217659]
                                       )
     model.roi_heads.forward = types.MethodType(forward, model.roi_heads)
 

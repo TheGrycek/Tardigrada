@@ -20,10 +20,10 @@ CLASSES_NUMBER = len(INSTANCE_CATEGORY_NAMES)
 KEYPOINTS = 7
 LOSS_WEIGHTS = {
     "loss_classifier": 1.0,
-    "loss_box_reg": 0.7,
-    "loss_keypoint": 2.0,
+    "loss_box_reg": 1.0,
+    "loss_keypoint": 1.0,
     "loss_objectness": 1.0,
-    "loss_rpn_box_reg": 0.7
+    "loss_rpn_box_reg": 1.0
 }
 
 # INFERENCE HYPER-PARAMETERS

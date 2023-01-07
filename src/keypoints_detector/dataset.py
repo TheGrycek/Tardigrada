@@ -17,7 +17,7 @@ random.seed(123)
 
 
 class KeypointsDataset(Dataset):
-    def __init__(self, images_dir, annotation_file, transforms=True):
+    def __init__(self, images_dir, annotation_file, transforms=False):
         super().__init__()
         self.dataset_dir = Path(images_dir)
         self.coco = COCO(annotation_file)
@@ -71,28 +71,31 @@ class KeypointsDataset(Dataset):
 
         return F.to_tensor(img), annotation
 
-    def augment(self, img, bboxes, keypoints, labels):
-            one_of = [alb.ImageCompression(p=1),
-                      alb.Blur(blur_limit=5, p=1),
-                      alb.GaussNoise(p=1),
-                      alb.CLAHE(p=1),
-                      alb.RandomGamma(p=1),
-                      alb.Downscale(scale_min=0.25, scale_max=0.75, p=1),
-                      alb.FancyPCA(alpha=0.1, p=1),
-                      ]
-            transform = alb.Compose([
-                alb.Affine(interpolation=3, p=0.9),
-                *[alb.OneOf(one_of, p=0.6) for _ in range(3)],
-                alb.ColorJitter(brightness=0.6, contrast=0.6, saturation=0.6, hue=0.6, p=0.7),
-                alb.ChannelShuffle(p=0.5),
-                alb.RGBShift(p=0.5),
-                ],
-                keypoint_params=alb.KeypointParams(format='xy', remove_invisible=False),
-                bbox_params=alb.BboxParams(format='pascal_voc', min_area=self.min_area, label_fields=['bboxes_labels'])
-            )
-            transformed = transform(image=img, keypoints=keypoints, bboxes=bboxes, bboxes_labels=labels)
+    def set_transforms(self, transforms):
+        self.transforms = transforms
 
-            return transformed["image"], transformed['bboxes'], transformed["keypoints"], labels
+    def augment(self, img, bboxes, keypoints, labels):
+        one_of = [alb.ImageCompression(p=1),
+                  alb.Blur(blur_limit=5, p=1),
+                  alb.GaussNoise(p=1),
+                  alb.CLAHE(p=1),
+                  alb.RandomGamma(p=1),
+                  alb.Downscale(scale_min=0.25, scale_max=0.75, p=1),
+                  alb.FancyPCA(alpha=0.1, p=1),
+                  ]
+        transform = alb.Compose([
+            alb.Affine(interpolation=3, p=0.9),
+            *[alb.OneOf(one_of, p=0.6) for _ in range(3)],
+            alb.ColorJitter(brightness=0.6, contrast=0.6, saturation=0.6, hue=0.6, p=0.7),
+            alb.ChannelShuffle(p=0.5),
+            alb.RGBShift(p=0.5),
+            ],
+            keypoint_params=alb.KeypointParams(format='xy', remove_invisible=False),
+            bbox_params=alb.BboxParams(format='pascal_voc', min_area=self.min_area, label_fields=['bboxes_labels'])
+        )
+        transformed = transform(image=img, keypoints=keypoints, bboxes=bboxes, bboxes_labels=labels)
+
+        return transformed["image"], transformed['bboxes'], transformed["keypoints"], labels
 
 
 def collate_function(batch):
@@ -105,9 +108,12 @@ def seed_worker(worker_id):
     random.seed(worker_seed)
 
 
-def load_data(images_dir, annotation_file=cfg.ANNOTATON_FILE,
-              transform=True, shuffle=False, val_ratio=cfg.VAL_RATIO, test_ratio=cfg.TEST_RATIO):
-    dataset = KeypointsDataset(images_dir=images_dir, annotation_file=annotation_file, transforms=transform)
+def create_dataloaders(images_dir, annotation_file=cfg.ANNOTATON_FILE,
+                       transform_train=True, transform_val=False, transform_test=False,
+                       shuffle_train=True, shuffle_val=False, shuffle_test=False,
+                       val_ratio=cfg.VAL_RATIO, test_ratio=cfg.TEST_RATIO, batch_size=cfg.BATCH_SIZE):
+
+    dataset = KeypointsDataset(images_dir=images_dir, annotation_file=annotation_file)
     total_cnt = dataset.__len__()
     val_cnt = int(val_ratio * total_cnt)
     test_cnt = int(test_ratio * total_cnt)
@@ -117,28 +123,40 @@ def load_data(images_dir, annotation_file=cfg.ANNOTATON_FILE,
     print(f"\nTRAINING IMAGES NUMBER: {train_cnt}\n"
           f"VALIDATION IMAGES NUMBER: {val_cnt}\n"
           f"TESTING IMAGES NUMBER: {test_cnt}\n")
+
     dataset_train, dataset_val, dataset_test = torch.utils.data.random_split(
         dataset,
         (train_cnt, val_cnt, test_cnt),
         generator=generator
     )
-    dataset_train.transforms = transform
-
-    dataloaders = {
-        name: DataLoader(dataset=dataset_, collate_fn=collate_function, batch_size=cfg.BATCH_SIZE,shuffle=shuffle,
-                         num_workers=cfg.NUM_WORKERS, worker_init_fn=seed_worker, generator=generator)
-        for name, dataset_ in zip(["train", "val", "test"], [dataset_train, dataset_val, dataset_test])
+    datasets = {
+        "train": (dataset_train, transform_train, shuffle_train),
+        "val": (dataset_val, transform_val, shuffle_val),
+        "test": (dataset_test, transform_test, shuffle_test)
     }
+
+    dataloaders = {}
+    for name, (subset, transform, shuffle) in datasets.items():
+        if len(subset) > 0:
+            # TODO: refactor to not override dataset classes
+            subset.dataset = KeypointsDataset(images_dir=images_dir, annotation_file=annotation_file,
+                                              transforms=transform)
+            dataloaders[name] = DataLoader(dataset=subset, collate_fn=collate_function, batch_size=batch_size,
+                                           shuffle=shuffle, num_workers=cfg.NUM_WORKERS, worker_init_fn=seed_worker,
+                                           generator=generator)
+        else:
+            dataloaders[name] = None
 
     return dataloaders
 
 
 def get_normalization_params(images_dir="../images/train", annotation_file=cfg.ANNOTATON_FILE):
-    dataset = KeypointsDataset(images_dir=images_dir, annotation_file=annotation_file, transforms=False)
-    dataloader = DataLoader(dataset=dataset, batch_size=cfg.BATCH_SIZE, shuffle=False)
+    dataloader = create_dataloaders(images_dir=images_dir, annotation_file=annotation_file, transform_train=False,
+                                    shuffle_train=False, val_ratio=0, test_ratio=0, batch_size=1)
     mean, std, imgs_num = 0, 0, 0
 
-    for imgs, _ in dataloader:
+    for imgs, _ in dataloader["train"]:
+        imgs = torch.stack(imgs)
         imgs_cnt = imgs.size(0)
         imgs = imgs.view(imgs_cnt, imgs.size(1), -1)
         mean += imgs.mean(2).sum(0)
@@ -148,11 +166,14 @@ def get_normalization_params(images_dir="../images/train", annotation_file=cfg.A
     mean /= imgs_num
     std /= imgs_num
 
-    return {"mean": mean.tolist(), "std": std.tolist()}
+    norm_params = {"mean": mean.tolist(), "std": std.tolist()}
+    print(f"MEAN:{norm_params['mean']}\nSTD:{norm_params['std']}\n")
+
+    return norm_params
 
 
 def check_examples():
-    dataloader = load_data(images_dir="../images/train", transform=True)["val"]
+    dataloader = create_dataloaders(images_dir="../images/train", transform_val=True)["val"]
 
     for i, (img, annotation) in enumerate(dataloader):
         img = tensor2rgb(img)
@@ -172,6 +193,5 @@ def check_examples():
 
 
 if __name__ == '__main__':
-    # norm_params = get_normalization_params(annotation_file="../coco-1659778596.546996.json")
-    # print(f"MEAN:{norm_params['mean']}\nSTD:{norm_params['std']}\n")
+    # get_normalization_params(annotation_file="../coco-1659778596.546996.json")
     check_examples()

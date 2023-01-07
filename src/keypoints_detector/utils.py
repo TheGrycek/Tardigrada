@@ -1,3 +1,7 @@
+import os
+import random
+from collections import OrderedDict
+
 import cv2
 import numpy as np
 import torch
@@ -83,6 +87,8 @@ def assign_prediction2ground_truth(pred_bboxes, targets_bboxes, iou_thresh=0.5):
 
 def get_assigned_data(prediction, target):
     idx = assign_prediction2ground_truth(prediction["boxes"], target["boxes"])
+    # TODO: resolve error with target["keypoints"][:, :, :2][idx[idx >= 0], :, :]
+
     prediction_assigned = {
         "keypoints": prediction["keypoints"][:, :, :2][idx[idx >= 0], :, :],
         "boxes": prediction["boxes"][idx[idx >= 0], :],
@@ -98,19 +104,53 @@ def get_assigned_data(prediction, target):
 
 def calc_oks(predictions, targets, img_sizes):
     """Calculate object keypoint similarity"""
-    oks_sum = 0
-    total_pts = 0
-    # TODO: define kappa parameters
-    k = torch.tensor([0.025, 0.072, 0.072, 0.072, 0.025, 0.062, 0.062])
-    for prediction, target, img_size in zip(predictions, targets, img_sizes):
-        pred, targ = get_assigned_data(prediction, target)
-        ws = torch.abs(targ["boxes"][:, 0] - targ["boxes"][:, 2])
-        hs = torch.abs(targ["boxes"][:, 1] - targ["boxes"][:, 3])
-        scales = ws * hs / np.sum(img_size)
-        distances = (pred["keypoints"] - targ["keypoints"]).pow(2).sum(2).sqrt()
-        kappa = torch.stack([k for _ in range(len(scales))])
+    try:
+        oks_sum = 0
+        total_pts = 0
+        # TODO: define kappa parameters
+        k = torch.tensor([0.025, 0.072, 0.072, 0.072, 0.025, 0.062, 0.062])
+        for prediction, target, img_size in zip(predictions, targets, img_sizes):
+            if len(prediction["boxes"]) > 0:
+                pred, targ = get_assigned_data(prediction, target)
+                ws = torch.abs(targ["boxes"][:, 0] - targ["boxes"][:, 2])
+                hs = torch.abs(targ["boxes"][:, 1] - targ["boxes"][:, 3])
+                scales = ws * hs / np.sum(img_size)
+                distances = (pred["keypoints"] - targ["keypoints"]).pow(2).sum(2).sqrt()
+                kappa = torch.stack([k for _ in range(len(scales))])
 
-        oks_sum += torch.exp(-(distances ** 2) / (2 * (scales.unsqueeze(1) ** 2) * (kappa ** 2))).sum()
-        total_pts += target["keypoints"][:, :, 0].numel()
+                oks_sum += torch.exp(-(distances ** 2) / (2 * (scales.unsqueeze(1) ** 2) * (kappa ** 2))).sum()
+                total_pts += target["keypoints"][:, :, 0].numel()
 
-    return oks_sum / total_pts
+        return oks_sum / total_pts if total_pts > 0 else 0
+
+    except Exception as e:
+        # logging.exception(e)
+        return 0
+
+
+def set_reproducibility_params():
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+    seed = 123
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+    torch.use_deterministic_algorithms(True, warn_only=True)
+
+
+def create_losses_dict():
+    names = [
+        "loss_total",
+        "loss_classifier",
+        "loss_box_reg",
+        "loss_keypoint",
+        "loss_objectness",
+        "loss_rpn_box_reg"
+    ]
+    losses_names = [stage + name for stage in ["train_", "val_"] for name in names]
+    losses = OrderedDict({key: [] for key in losses_names})
+
+    return losses_names, losses

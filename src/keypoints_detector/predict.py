@@ -1,16 +1,15 @@
-from pathlib import Path
+from pprint import pprint
 
 import cv2
 import numpy as np
 import torch
 import torchvision.transforms.functional as F
+from torchmetrics.detection.mean_ap import MeanAveragePrecision
 
 import src.keypoints_detector.config as cfg
-from src.keypoints_detector.dataset import load_data
+from src.keypoints_detector.dataset import create_dataloaders
 from src.keypoints_detector.model import keypoint_detector
-from src.keypoints_detector.utils import tensor2rgb, calc_oks
-from torchmetrics.detection.mean_ap import MeanAveragePrecision
-from pprint import pprint
+from src.keypoints_detector.utils import calc_oks
 
 
 def predict(model, img, device):
@@ -56,17 +55,12 @@ def predict(model, img, device):
     return output
 
 
-def test(images_path, annotation_path, device):
-    model = keypoint_detector()
-    model.load_state_dict(torch.load("./checkpoints/keypoints_detector.pth"))
-    model.eval().to(device)
-    dataloaders = load_data(images_dir=str(images_path), annotation_file=str(annotation_path),
-                            transform=False, val_ratio=cfg.VAL_RATIO, test_ratio=cfg.TEST_RATIO)
+def test(model, dataloader_test, device):
     mAP = MeanAveragePrecision()
     predictions_, targets_, img_sizes = [], [], []
 
     with torch.no_grad():
-        for i, (images, targets) in enumerate(dataloaders["test"]):
+        for i, (images, targets) in enumerate(dataloader_test):
             for img, target in zip(images, targets):
                 predicted = model([img.to(device)])[0]
                 img_sizes.append(img.shape[:2])
@@ -87,11 +81,22 @@ def test(images_path, annotation_path, device):
     mAP.update(predictions_, targets_)
     results = mAP.compute()
     results["oks"] = calc_oks(predictions_, targets_, img_sizes)
-    pprint(results)
+
+    return results
+
+
+def run_testing(images_path="../images/train", annotation_path=cfg.ANNOTATON_FILE,
+                model_path="./checkpoints/keypoints_detector.pth", device=cfg.DEVICE, model_config=None):
+    model = keypoint_detector() if model_config is None else keypoint_detector(**model_config)
+    model.load_state_dict(torch.load(str(model_path)))
+    model.eval().to(device)
+    dataloaders = create_dataloaders(images_dir=str(images_path), annotation_file=str(annotation_path),
+                                     val_ratio=cfg.VAL_RATIO, test_ratio=cfg.TEST_RATIO)
+
+    return test(model, dataloaders["test"], device)
 
 
 if __name__ == '__main__':
-    images_path = Path("../images/train")
-    annotation_path = Path(cfg.ANNOTATON_FILE)
     print(f"MY DEVICE: {cfg.DEVICE}")
-    test(images_path, annotation_path, cfg.DEVICE)
+    results = run_testing()
+    pprint(results)
