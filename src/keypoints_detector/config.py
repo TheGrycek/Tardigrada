@@ -1,7 +1,9 @@
 import torch
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-ANNOTATON_FILE = "../coco-1659778596.546996.json"
+ANNOTATON_FILE_PATH = "../images/train/dataset_100/TardigradaNew.json"
+IMAGES_PATH = "../images/train/dataset_100"
+MODEL_PATH = "./checkpoints/keypoints_detector.pth"
 
 # TRAINING HYPER-PARAMETERS
 LEARNING_RATE = 0.002  # 0.001

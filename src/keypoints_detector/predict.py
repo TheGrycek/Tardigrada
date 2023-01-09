@@ -85,8 +85,8 @@ def test(model, dataloader_test, device):
     return results
 
 
-def run_testing(images_path="../images/train", annotation_path=cfg.ANNOTATON_FILE,
-                model_path="./checkpoints/keypoints_detector.pth", device=cfg.DEVICE, model_config=None):
+def run_testing(images_path=cfg.IMAGES_PATH, annotation_path=cfg.ANNOTATON_FILE_PATH,
+                model_path=cfg.MODEL_PATH, device=cfg.DEVICE, model_config=None):
     model = keypoint_detector() if model_config is None else keypoint_detector(**model_config)
     model.load_state_dict(torch.load(str(model_path)))
     model.eval().to(device)

@@ -12,6 +12,7 @@ import config as cfg
 from dataset import create_dataloaders
 from model import keypoint_detector
 from utils import set_reproducibility_params, create_losses_dict
+import warnings
 
 set_reproducibility_params()
 writer = SummaryWriter("./runs/board_results")
@@ -40,11 +41,13 @@ def validate(model, device, imgs, targets, epoch_losses, losses_names):
     targets = [{k: v.to(device) for k, v in target.items()} for target in targets]
 
     val_loss_dict = model(img_batch, targets)
-    val_loss_total = sum(loss * cfg.LOSS_WEIGHTS[name] for name, loss in val_loss_dict.items())
+    val_loss_total = float(sum(loss * cfg.LOSS_WEIGHTS[name] for name, loss in val_loss_dict.items()).item())
 
-    epoch_losses["val_loss_total"].append(float(val_loss_total.item()))
+    epoch_losses["val_loss_total"].append(val_loss_total)
     for loss_key in losses_names[7:]:
         epoch_losses[loss_key].append(float(val_loss_dict[loss_key.replace("val_", "")].item()))
+
+    return val_loss_total
 
 
 def add_tensorboard_image(img_tensor):
@@ -80,7 +83,8 @@ def save_plots_plt(losses):
     plt.show()
 
 
-def train(images_path, annotation_path, device, save_plots_matplotlib=True, print_stats_n_epoch=1, export_onnx=True):
+def train(images_path=cfg.IMAGES_PATH, annotation_path=cfg.ANNOTATON_FILE_PATH, device=cfg.DEVICE,
+          save_plots_matplotlib=True, print_stats_n_epoch=1, export_onnx=True, save_best=True):
     model = keypoint_detector()
     model.to(device)
     optimizer = torch.optim.SGD(model.parameters(),
@@ -104,6 +108,7 @@ def train(images_path, annotation_path, device, save_plots_matplotlib=True, prin
 
     start_total = time()
     model.train()
+    best_val_loss = float("inf")
     for epoch in range(cfg.EPOCHS):
         start_epoch = time()
         epoch_losses = {key: [] for key in losses_names}
@@ -111,16 +116,23 @@ def train(images_path, annotation_path, device, save_plots_matplotlib=True, prin
         for i, (imgs, targets) in enumerate(dataloaders["train"]):
             train_one_batch(model, device, imgs, targets, optimizer, scheduler, epoch_losses, losses_names)
 
+        epoch_mean_val_loss = 0
         with torch.no_grad():
             for i, (imgs, targets) in enumerate(dataloaders["val"]):
-                validate(model, device, imgs, targets, epoch_losses, losses_names)
+                val_loss_total = validate(model, device, imgs, targets, epoch_losses, losses_names)
+                epoch_mean_val_loss += val_loss_total
+
+        epoch_mean_val_loss /= len(dataloaders["val"])
+        if save_best and epoch_mean_val_loss < best_val_loss:
+            best_val_loss = epoch_mean_val_loss
+            torch.save(model.state_dict(), f"checkpoints/keypoints_detector_best.pth")
 
         for loss_key in losses_names:
             losses[loss_key].append(np.asarray(epoch_losses[loss_key]).mean())
 
         if cfg.CHECKPOINT_SAVE_INTERVAL:
             if epoch % cfg.CHECKPOINT_SAVE_INTERVAL == 0:
-                torch.save(model.state_dict(), f"checkpoints/segmenter_checkpoint{epoch}.pth")
+                torch.save(model.state_dict(), f"checkpoints/keypoints_detector{epoch}.pth")
 
         if (epoch + 1) % print_stats_n_epoch == 0:
             print(f"epoch: {epoch + 1}, "
@@ -130,7 +142,7 @@ def train(images_path, annotation_path, device, save_plots_matplotlib=True, prin
 
         add_tensorboard_scalars(epoch_losses, epoch)
 
-    torch.save(model.state_dict(), "checkpoints/keypoints_detector_test.pth")
+    torch.save(model.state_dict(), "checkpoints/keypoints_detector_last.pth")
     print(f"TOTAL TRAINING TIME: {strftime('%H:%M:%S', gmtime(time() - start_total))}")
 
     if save_plots_matplotlib:
@@ -145,7 +157,6 @@ def train(images_path, annotation_path, device, save_plots_matplotlib=True, prin
 
 
 if __name__ == '__main__':
-    images_path = Path("../images/train")
-    annotation_path = Path(cfg.ANNOTATON_FILE)
+    warnings.filterwarnings('ignore')
     print(f"MY DEVICE: {cfg.DEVICE}")
-    train(images_path, annotation_path, cfg.DEVICE, save_plots_matplotlib=True, print_stats_n_epoch=1)
+    train()

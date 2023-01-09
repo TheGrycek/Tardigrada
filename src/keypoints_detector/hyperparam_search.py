@@ -96,8 +96,8 @@ def search_hyperparameters(search_mode="training"):
 
 if __name__ == '__main__':
     src_path = Path.cwd().parent
-    images_path = src_path / "images/train"
-    annotation_path = src_path / "coco-1659778596.546996.json"
-    model_path = src_path / "keypoints_detector//checkpoints/keypoints_detector.pth"
+    images_path = src_path / "images/train/dataset_100"
+    annotation_path = images_path / "TardigradaNew.json"
+    model_path = src_path / "keypoints_detector/checkpoints/keypoints_detector.pth"
     results_path = src_path.parent / "results"
     search_hyperparameters()
