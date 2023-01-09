@@ -1,6 +1,5 @@
 __pycache__/
 .idea/
-src/images/
 src/gui/icons
 crops/
 *.jpg
@@ -12,6 +11,8 @@ crops/
 *.zip
 *.log
 /docs
+src/images/train/dataset_100/
+src/images/test/
 src/keypoints_detector/runs/
 !images/keypoint_rcnn_detection.jpg
 !src/gui/icons.zip
