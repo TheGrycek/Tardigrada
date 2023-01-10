@@ -6,10 +6,10 @@ import torch
 import torchvision.transforms.functional as F
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
 
-import src.keypoints_detector.config as cfg
-from src.keypoints_detector.dataset import create_dataloaders
-from src.keypoints_detector.model import keypoint_detector
-from src.keypoints_detector.utils import calc_oks
+import keypoints_detector.config as cfg
+from keypoints_detector.dataset import create_dataloaders
+from keypoints_detector.model import keypoint_detector
+from keypoints_detector.utils import calc_oks
 
 
 def predict(model, img, device):

@@ -9,8 +9,8 @@ import torchvision.transforms.functional as F
 from pycocotools.coco import COCO
 from torch.utils.data import Dataset, DataLoader
 
-import src.keypoints_detector.config as cfg
-from src.keypoints_detector.utils import tensor2rgb
+import keypoints_detector.config as cfg
+from keypoints_detector.utils import tensor2rgb
 
 seed = 123
 random.seed(123)

@@ -145,7 +145,7 @@ def prepare_paths(args):
 
 def load_model():
     model = keypoint_detector()
-    model.load_state_dict(torch.load("./keypoints_detector/checkpoints/keypoints_detector.pth"))
+    model.load_state_dict(torch.load("./keypoints_detector/checkpoints/keypoints_detector_old.pth"))
 
     return model
 

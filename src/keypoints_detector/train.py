@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import torch.optim.lr_scheduler as lr_scheduler
 import torchvision.utils
-from torch.utils.tensorboard import SummaryWriter
+# from torch.utils.tensorboard import SummaryWriter
 
 import config as cfg
 from dataset import create_dataloaders
@@ -15,7 +15,7 @@ from utils import set_reproducibility_params, create_losses_dict
 import warnings
 
 set_reproducibility_params()
-writer = SummaryWriter("./runs/board_results")
+# writer = SummaryWriter("./runs/board_results")
 
 
 def train_one_batch(model, device, imgs, targets, optimizer, scheduler, epoch_losses, losses_names):
@@ -102,7 +102,7 @@ def train(images_path=cfg.IMAGES_PATH, annotation_path=cfg.ANNOTATON_FILE_PATH, 
                                          gamma=cfg.GAMMA)
 
     img_example, target_example = (iter(dataloaders["val"])).next()
-    add_tensorboard_image(img_example)
+    # add_tensorboard_image(img_example)
 
     losses_names, losses = create_losses_dict()
 
@@ -140,7 +140,7 @@ def train(images_path=cfg.IMAGES_PATH, annotation_path=cfg.ANNOTATON_FILE_PATH, 
                   f"validation loss={epoch_losses['val_loss_total'][-1]:.4f}, "
                   f" time: {time() - start_epoch}")
 
-        add_tensorboard_scalars(epoch_losses, epoch)
+        # add_tensorboard_scalars(epoch_losses, epoch)
 
     torch.save(model.state_dict(), "checkpoints/keypoints_detector_last.pth")
     print(f"TOTAL TRAINING TIME: {strftime('%H:%M:%S', gmtime(time() - start_total))}")
