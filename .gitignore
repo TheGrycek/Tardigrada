@@ -10,7 +10,6 @@ crops/
 *.csv
 *.zip
 *.log
-/docs
 src/images/test/
 src/keypoints_detector/runs/
 !images/keypoint_rcnn_detection.jpg

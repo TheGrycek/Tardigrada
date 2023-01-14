@@ -29,10 +29,6 @@ def parse_args():
     return parser.parse_args()
 
 
-def calc_dist(pt1, pt2):
-    return np.sqrt(np.sum(np.square(pt1 - pt2)))
-
-
 def fit_polynomial(bbox, points, keypoints_num):
     bbox_w = bbox[0] - bbox[2]
     bbox_l = bbox[1] - bbox[3]
@@ -145,7 +141,7 @@ def prepare_paths(args):
 
 def load_model():
     model = keypoint_detector()
-    model.load_state_dict(torch.load("./keypoints_detector/checkpoints/keypoints_detector_old.pth"))
+    model.load_state_dict(torch.load("./keypoints_detector/checkpoints/keypoints_detector.pth"))
 
     return model
 

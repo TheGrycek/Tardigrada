@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import os
 from pathlib import Path
 
@@ -5,12 +7,12 @@ import numpy as np
 import torch
 from ray import tune
 
-import config as cfg
-from dataset import create_dataloaders
-from model import keypoint_detector
-from predict import run_testing
-from train import train_one_batch, validate
-from utils import set_reproducibility_params, create_losses_dict
+import keypoints_detector.config as cfg
+from keypoints_detector.dataset import create_dataloaders
+from keypoints_detector.model import keypoint_detector
+from keypoints_detector.predict import run_testing
+from keypoints_detector.train import train_one_batch, validate
+from keypoints_detector.utils import set_reproducibility_params, create_losses_dict
 
 set_reproducibility_params()
 os.environ["TUNE_DISABLE_STRICT_METRIC_CHECKING"] = "1"
@@ -26,7 +28,7 @@ def check_training_params(config):
                                 weight_decay=config["weight_decay"],
                                 momentum=config["momentum"])
 
-    dataloaders = create_dataloaders(images_dir=str(images_path), annotation_file=str(annotation_path),
+    dataloaders = create_dataloaders(images_dir=str(cfg.IMAGES_PATH), annotation_file=str(cfg.ANNOTATON_FILE_PATH),
                                      val_ratio=cfg.VAL_RATIO, test_ratio=cfg.TEST_RATIO)
 
     losses_names, _ = create_losses_dict()
@@ -46,12 +48,15 @@ def check_training_params(config):
 
 
 def check_inference_params(config):
-    test_results = run_testing(images_path=images_path, annotation_path=annotation_path,
-                               model_path=model_path, model_config=config)
+    test_results = run_testing(images_path=cfg.IMAGES_PATH, annotation_path=cfg.ANNOTATON_FILE_PATH,
+                               model_path=cfg.MODEL_PATH, model_config=config)
     tune.report(map_50=test_results["map_50"], oks=test_results["oks"])
 
 
 def search_hyperparameters(search_mode="training"):
+    results_path = Path("/tarmass/src/keypoints_detector/hyperparam_results")
+    results_path.mkdir(exist_ok=True)
+
     if search_mode == "training":
         config = {
             "learning_rate": tune.loguniform(1e-4, 1e-1),
@@ -67,7 +72,7 @@ def search_hyperparameters(search_mode="training"):
             metric="val_loss_total",
             mode="min",
             num_samples=100,
-            resources_per_trial={"cpu": 1, "gpu": 1},
+            resources_per_trial={"cpu": 16, "gpu": 1},
             verbose=1,
         )
 
@@ -90,14 +95,8 @@ def search_hyperparameters(search_mode="training"):
         raise NotImplementedError
 
     result_df = analysis.best_result_df
-    results_file_dir = results_path / f"{search_mode}_hyperparams_results.csv"
-    result_df.to_csv(results_file_dir)
+    result_df.to_csv(results_path / f"{search_mode}_hyperparams_results.csv")
 
 
 if __name__ == '__main__':
-    src_path = Path.cwd().parent
-    images_path = src_path / "images/train/dataset_100"
-    annotation_path = images_path / "TardigradaNew.json"
-    model_path = src_path / "keypoints_detector/checkpoints/keypoints_detector.pth"
-    results_path = src_path.parent / "results"
     search_hyperparameters()

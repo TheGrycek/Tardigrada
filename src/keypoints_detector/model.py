@@ -134,8 +134,11 @@ def forward(self, features, proposals, image_shapes, targets=None):
 
 def keypoint_detector(num_classes=4, num_keypoints=7, box_nms_thresh=0.50, rpn_score_thresh=0.80, rpn_nms_thresh=0.70,
                       box_score_thresh=0.80, box_detections_per_img=300):
-    anchor_generator = rpn.AnchorGenerator(sizes=(16, 32, 64, 128, 256),
-                                           aspect_ratios=(0.25, 0.5, 0.75, 1.0, 2.0, 4.0))
+
+    # anchor_generator = rpn.AnchorGenerator(sizes=(32, 64, 128, 256, 512),
+    #                                        aspect_ratios=(0.25, 0.5, 1.0, 2.0))
+    anchor_generator = rpn.AnchorGenerator(sizes=(32, 64, 128, 256, 512),
+                                           aspect_ratios=(0.25, 0.5, 0.75, 1.0, 2.0, 3.0, 4.0))
 
     model = keypointrcnn_resnet50_fpn(weights=None,
                                       weights_backbone=ResNet50_Weights.DEFAULT,

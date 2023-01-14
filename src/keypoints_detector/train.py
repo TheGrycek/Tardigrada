@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from pathlib import Path
 from time import time, strftime, gmtime
 
@@ -8,10 +10,10 @@ import torch.optim.lr_scheduler as lr_scheduler
 import torchvision.utils
 # from torch.utils.tensorboard import SummaryWriter
 
-import config as cfg
-from dataset import create_dataloaders
-from model import keypoint_detector
-from utils import set_reproducibility_params, create_losses_dict
+import keypoints_detector.config as cfg
+from keypoints_detector.dataset import create_dataloaders
+from keypoints_detector.model import keypoint_detector
+from keypoints_detector.utils import set_reproducibility_params, create_losses_dict
 import warnings
 
 set_reproducibility_params()
@@ -97,11 +99,12 @@ def train(images_path=cfg.IMAGES_PATH, annotation_path=cfg.ANNOTATON_FILE_PATH, 
                                      val_ratio=cfg.VAL_RATIO,
                                      test_ratio=cfg.TEST_RATIO)
 
-    scheduler = lr_scheduler.MultiStepLR(optimizer,
-                                         milestones=cfg.MILESTONES,
-                                         gamma=cfg.GAMMA)
+    scheduler = None
+    # scheduler = lr_scheduler.MultiStepLR(optimizer,
+    #                                      milestones=cfg.MILESTONES,
+    #                                      gamma=cfg.GAMMA)
 
-    img_example, target_example = (iter(dataloaders["val"])).next()
+    # img_example, target_example = (iter(dataloaders["val"])).next()
     # add_tensorboard_image(img_example)
 
     losses_names, losses = create_losses_dict()
