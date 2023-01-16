@@ -29,6 +29,3 @@ cd /tarmass/src
 ./hyperparam_search.py
 ```
 One can edit the search space inside the `hyperparam_search.py` script.
-
-> Note: If running in a Docker container, set the number of dataloader workers  to 0 in your `config.py` file: `NUM_WORKERS = 0`
-

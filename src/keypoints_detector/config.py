@@ -1,17 +1,17 @@
 import torch
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-ANNOTATON_FILE_PATH = "../images/train/dataset_100/TardigradaNew.json"
-IMAGES_PATH = "../images/train/dataset_100"
-MODEL_PATH = "checkpoints/keypoints_detector.pth"
+ANNOTATON_FILE_PATH = "/tarmass/src/images/train/dataset_100/TardigradaNew.json"
+IMAGES_PATH = "/tarmass/src/images/train/dataset_100"
+MODEL_PATH = "/tarmass/src/keypoints_detector/checkpoints/keypoints_detector_old3.pth"
 
 # TRAINING HYPER-PARAMETERS
 LEARNING_RATE = 0.00017593
 MOMENTUM = 0.39937871
 WEIGHT_DECAY = 0.00003578
-GAMMA = 0.42430686
-# MILESTONES = [200, 400]
-EPOCHS = 1200
+GAMMA = 0.5
+MILESTONES = [200, 300, 600]
+EPOCHS = 800
 BATCH_SIZE = 1
 TEST_RATIO = 0.1
 VAL_RATIO = 0.1

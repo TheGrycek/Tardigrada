@@ -25,6 +25,7 @@ class KeypointsDataset(Dataset):
         self.transforms = transforms
         self.points_num = cfg.KEYPOINTS
         self.min_area = 100
+        self.min_visibility = 0.1
 
     def __len__(self):
         return len(self.ids)
@@ -48,6 +49,8 @@ class KeypointsDataset(Dataset):
             y_min = coco_elem['bbox'][1]
             x_max = x_min + coco_elem['bbox'][2]
             y_max = y_min + coco_elem['bbox'][3]
+            if x_min == x_max or y_min == y_max:
+                continue
 
             bboxes.append([x_min, y_min, x_max, y_max])
             keypoints.append(np.asarray(coco_elem['keypoints']).reshape((self.points_num, 3))[:, :2])
@@ -91,7 +94,8 @@ class KeypointsDataset(Dataset):
             alb.RGBShift(p=0.5),
             ],
             keypoint_params=alb.KeypointParams(format='xy', remove_invisible=False),
-            bbox_params=alb.BboxParams(format='pascal_voc', min_area=self.min_area, label_fields=['bboxes_labels'])
+            bbox_params=alb.BboxParams(format='pascal_voc', min_area=self.min_area,
+                                       min_visibility=self.min_visibility, label_fields=['bboxes_labels'])
         )
         transformed = transform(image=img, keypoints=keypoints, bboxes=bboxes, bboxes_labels=labels)
 

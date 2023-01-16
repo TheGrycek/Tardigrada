@@ -12,7 +12,8 @@ def keypointrcnn_loss(keypoint_logits, proposals, gt_keypoints, keypoint_matched
     N, K, H, W = keypoint_logits.shape
     if H != W:
         raise ValueError(
-            f"keypoint_logits height and width (last two elements of shape) should be equal. Instead got H = {H} and W = {W}"
+            f"keypoint_logits height and width (last two elements of shape) should be equal. "
+            f"Instead got H = {H} and W = {W}"
         )
     discretization_size = H
     heatmaps = []
@@ -149,9 +150,7 @@ def keypoint_detector(num_classes=4, num_keypoints=7, box_nms_thresh=0.50, rpn_s
                                       rpn_nms_thresh=rpn_nms_thresh,
                                       box_score_thresh=box_score_thresh,
                                       rpn_anchor_generator=anchor_generator,
-                                      box_detections_per_img=box_detections_per_img,
-                                      image_mean=[0.496971994638443, 0.5360406041145325, 0.5186474323272705],
-                                      image_std=[0.1036350354552269, 0.11380469799041748, 0.11029907315969467]
+                                      box_detections_per_img=box_detections_per_img
                                       )
 
     model.roi_heads.forward = types.MethodType(forward, model.roi_heads)

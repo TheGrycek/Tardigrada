@@ -53,7 +53,7 @@ def check_inference_params(config):
     tune.report(map_50=test_results["map_50"], oks=test_results["oks"])
 
 
-def search_hyperparameters(search_mode="training"):
+def search_hyperparameters(search_mode="inference"):
     results_path = Path("/tarmass/src/keypoints_detector/hyperparam_results")
     results_path.mkdir(exist_ok=True)
 
@@ -65,34 +65,33 @@ def search_hyperparameters(search_mode="training"):
             "gamma": tune.uniform(0, 1),
             "epochs": 20
         }
-
-        analysis = tune.run(
-            check_training_params,
-            config=config,
-            metric="val_loss_total",
-            mode="min",
-            num_samples=100,
-            resources_per_trial={"cpu": 16, "gpu": 1},
-            verbose=1,
-        )
+        metric = {
+            "metric": "val_loss_total",
+            "mode": "min"
+        }
 
     elif search_mode == "inference":
         config = {
-            "box_nms_thresh": tune.uniform(0, 1),
+            "rpn_score_thresh": tune.uniform(0.0, 0.9),
+            "box_score_thresh": tune.uniform(0.0, 0.9),
+            "box_nms_thresh": tune.uniform(0.0, 0.9),
         }
-
-        analysis = tune.run(
-            check_inference_params,
-            config=config,
-            metric="oks",
-            mode="max",
-            num_samples=100,
-            resources_per_trial={"cpu": 1, "gpu": 1},
-            verbose=1,
-        )
+        metric = {
+            "metric": "map_50",
+            "mode": "max"
+        }
 
     else:
         raise NotImplementedError
+
+    analysis = tune.run(
+        check_inference_params,
+        **metric,
+        config=config,
+        num_samples=1,
+        resources_per_trial={"cpu": 16, "gpu": 1},
+        verbose=1,
+    )
 
     result_df = analysis.best_result_df
     result_df.to_csv(results_path / f"{search_mode}_hyperparams_results.csv")
