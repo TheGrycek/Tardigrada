@@ -112,7 +112,7 @@ def seed_worker(worker_id):
     random.seed(worker_seed)
 
 
-def create_dataloaders(images_dir=cfg.IMAGES_PATH, annotation_file=cfg.ANNOTATON_FILE_PATH,
+def create_dataloaders(images_dir=cfg.IMAGES_PATH, annotation_file=cfg.ANNOTATION_FILE_PATH,
                        transform_train=True, transform_val=False, transform_test=False,
                        shuffle_train=True, shuffle_val=False, shuffle_test=False,
                        val_ratio=cfg.VAL_RATIO, test_ratio=cfg.TEST_RATIO, batch_size=cfg.BATCH_SIZE):
@@ -154,7 +154,7 @@ def create_dataloaders(images_dir=cfg.IMAGES_PATH, annotation_file=cfg.ANNOTATON
     return dataloaders
 
 
-def get_normalization_params(images_dir=cfg.IMAGES_PATH, annotation_file=cfg.ANNOTATON_FILE_PATH):
+def get_normalization_params(images_dir=cfg.IMAGES_PATH, annotation_file=cfg.ANNOTATION_FILE_PATH):
     dataloader = create_dataloaders(images_dir=images_dir, annotation_file=annotation_file, transform_train=False,
                                     shuffle_train=False, val_ratio=cfg.VAL_RATIO, test_ratio=cfg.TEST_RATIO,
                                     batch_size=1)

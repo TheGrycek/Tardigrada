@@ -14,6 +14,7 @@ RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 FROM nvidia/cuda:11.3.1-base-ubuntu20.04
+ARG DEBIAN_FRONTEND=noninteractive
 WORKDIR /tarmass
 
 COPY --from=build /opt/venv /opt/venv

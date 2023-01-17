@@ -55,7 +55,7 @@ def predict(model, img, device):
     return output
 
 
-def test(model, dataloader_test, device):
+def test(model, dataloader_test, device=cfg.DEVICE):
     mAP = MeanAveragePrecision()
     predictions_, targets_, img_sizes = [], [], []
 
@@ -85,7 +85,7 @@ def test(model, dataloader_test, device):
     return results
 
 
-def run_testing(images_path=cfg.IMAGES_PATH, annotation_path=cfg.ANNOTATON_FILE_PATH,
+def run_testing(images_path=cfg.IMAGES_PATH, annotation_path=cfg.ANNOTATION_FILE_PATH,
                 model_path=cfg.MODEL_PATH, device=cfg.DEVICE, model_config=None):
     model = keypoint_detector() if model_config is None else keypoint_detector(**model_config)
     model.load_state_dict(torch.load(str(model_path)))

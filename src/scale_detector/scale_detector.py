@@ -1,6 +1,6 @@
+import cv2
 import numpy as np
 from easyocr import Reader
-import cv2
 
 
 def change_to_um(text):

@@ -6,6 +6,8 @@ from torchvision.models.detection import keypointrcnn_resnet50_fpn, rpn
 from torchvision.models.detection.roi_heads import fastrcnn_loss, keypointrcnn_inference, keypoints_to_heatmap
 from torchvision.models.resnet import ResNet50_Weights
 
+import keypoints_detector.config as cfg
+
 
 def keypointrcnn_loss(keypoint_logits, proposals, gt_keypoints, keypoint_matched_idxs):
     """Function from torchvision.models.detection.roi_heads"""
@@ -133,13 +135,19 @@ def forward(self, features, proposals, image_shapes, targets=None):
     return result, losses
 
 
-def keypoint_detector(num_classes=4, num_keypoints=7, box_nms_thresh=0.50, rpn_score_thresh=0.80, rpn_nms_thresh=0.70,
-                      box_score_thresh=0.80, box_detections_per_img=300):
+def keypoint_detector(num_classes=cfg.CLASSES_NUMBER,
+                      num_keypoints=cfg.KEYPOINTS,
+                      box_nms_thresh=cfg.BOX_NMS_THRESH,
+                      rpn_score_thresh=cfg.RPN_SCORE_THRESH,
+                      box_score_thresh=cfg.BOX_SCORE_THRESH,
+                      box_detections_per_img=cfg.DETECTIONS_PER_IMG):
 
-    # anchor_generator = rpn.AnchorGenerator(sizes=(32, 64, 128, 256, 512),
-    #                                        aspect_ratios=(0.25, 0.5, 1.0, 2.0))
     anchor_generator = rpn.AnchorGenerator(sizes=(32, 64, 128, 256, 512),
-                                           aspect_ratios=(0.25, 0.5, 0.75, 1.0, 2.0, 3.0, 4.0))
+                                           aspect_ratios=(0.25, 0.5, 1.0, 2.0))
+
+    # used for keypoints_detector_old3.pth
+    # anchor_generator = rpn.AnchorGenerator(sizes=(32, 64, 128, 256, 512),
+    #                                        aspect_ratios=(0.25, 0.5, 0.75, 1.0, 2.0, 3.0, 4.0))
 
     model = keypointrcnn_resnet50_fpn(weights=None,
                                       weights_backbone=ResNet50_Weights.DEFAULT,
@@ -147,7 +155,6 @@ def keypoint_detector(num_classes=4, num_keypoints=7, box_nms_thresh=0.50, rpn_s
                                       num_keypoints=num_keypoints,
                                       box_nms_thresh=box_nms_thresh,
                                       rpn_score_thresh=rpn_score_thresh,
-                                      rpn_nms_thresh=rpn_nms_thresh,
                                       box_score_thresh=box_score_thresh,
                                       rpn_anchor_generator=anchor_generator,
                                       box_detections_per_img=box_detections_per_img

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+from argparse import ArgumentParser
 from pathlib import Path
 
 import numpy as np
@@ -18,6 +19,14 @@ set_reproducibility_params()
 os.environ["TUNE_DISABLE_STRICT_METRIC_CHECKING"] = "1"
 
 
+def parse_args():
+    parser = ArgumentParser()
+    parser.add_argument("--search_mode", type=str, default="inference",
+                        help="Hyperparameters tuning mode- inference/training")
+
+    return parser.parse_args()
+
+
 def check_training_params(config):
     device = cfg.DEVICE
     model = keypoint_detector()
@@ -28,7 +37,7 @@ def check_training_params(config):
                                 weight_decay=config["weight_decay"],
                                 momentum=config["momentum"])
 
-    dataloaders = create_dataloaders(images_dir=str(cfg.IMAGES_PATH), annotation_file=str(cfg.ANNOTATON_FILE_PATH),
+    dataloaders = create_dataloaders(images_dir=str(cfg.IMAGES_PATH), annotation_file=str(cfg.ANNOTATION_FILE_PATH),
                                      val_ratio=cfg.VAL_RATIO, test_ratio=cfg.TEST_RATIO)
 
     losses_names, _ = create_losses_dict()
@@ -48,16 +57,16 @@ def check_training_params(config):
 
 
 def check_inference_params(config):
-    test_results = run_testing(images_path=cfg.IMAGES_PATH, annotation_path=cfg.ANNOTATON_FILE_PATH,
+    test_results = run_testing(images_path=cfg.IMAGES_PATH, annotation_path=cfg.ANNOTATION_FILE_PATH,
                                model_path=cfg.MODEL_PATH, model_config=config)
     tune.report(map_50=test_results["map_50"], oks=test_results["oks"])
 
 
-def search_hyperparameters(search_mode="inference"):
+def search_hyperparameters(args):
     results_path = Path("/tarmass/src/keypoints_detector/hyperparam_results")
     results_path.mkdir(exist_ok=True)
 
-    if search_mode == "training":
+    if args.search_mode == "training":
         config = {
             "learning_rate": tune.loguniform(1e-4, 1e-1),
             "weight_decay": tune.loguniform(1e-5, 1e-1),
@@ -69,8 +78,9 @@ def search_hyperparameters(search_mode="inference"):
             "metric": "val_loss_total",
             "mode": "min"
         }
+        test_function = check_training_params
 
-    elif search_mode == "inference":
+    elif args.search_mode == "inference":
         config = {
             "rpn_score_thresh": tune.uniform(0.0, 0.9),
             "box_score_thresh": tune.uniform(0.0, 0.9),
@@ -80,22 +90,24 @@ def search_hyperparameters(search_mode="inference"):
             "metric": "map_50",
             "mode": "max"
         }
+        test_function = check_inference_params
 
     else:
         raise NotImplementedError
 
     analysis = tune.run(
-        check_inference_params,
+        test_function,
         **metric,
         config=config,
-        num_samples=1,
+        num_samples=100,
         resources_per_trial={"cpu": 16, "gpu": 1},
         verbose=1,
     )
 
+    # TODO: check why best result isn't working
     result_df = analysis.best_result_df
-    result_df.to_csv(results_path / f"{search_mode}_hyperparams_results.csv")
+    result_df.to_csv(results_path / f"{args.search_mode}_hyperparams_results.csv")
 
 
 if __name__ == '__main__':
-    search_hyperparameters()
+    search_hyperparameters(parse_args())
