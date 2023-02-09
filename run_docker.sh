@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-sudo docker build -t tardigrada:latest .
 xhost +local:docker
 sudo docker run --rm -it \
                 --gpus all \

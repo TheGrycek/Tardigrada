@@ -15,7 +15,7 @@ from scipy.interpolate import splprep, splev
 import keypoints_detector.config as cfg
 from keypoints_detector.model import keypoint_detector
 from keypoints_detector.predict import predict
-from keypoints_detector.utils import calc_dist
+from keypoints_detector.utils import calc_dist, calc_dimensions
 from scale_detector.scale_detector import read_scale
 
 
@@ -78,15 +78,6 @@ def fit_bspline(bbox, points, keypoints_num):
     return pts
 
 
-def calc_dimensions(length_pts, width_pts, scale_ratio):
-    points = width_pts.astype(np.uint64)
-    right, left = points
-    width = calc_dist(left, right) * scale_ratio
-    len_parts = [calc_dist(length_pts[i], length_pts[i + 1]) for i in range(len(length_pts) - 1)]
-    length = np.sum(np.asarray(len_parts)) * scale_ratio
-    return length, width
-
-
 def calculate_mass(predicted, scale, img_path, curve_fit_algorithm="bspline"):
     scale_ratio = scale["um"] / scale["bbox"][2]
     density = 1.04
@@ -101,7 +92,6 @@ def calculate_mass(predicted, scale, img_path, curve_fit_algorithm="bspline"):
         length_pts = fit_algorithms[curve_fit_algorithm](bbox, points, cfg.KEYPOINTS)
         lengths_points.append(length_pts)
         length, width = calc_dimensions(length_pts, points[-2:], scale_ratio)
-
         class_name = cfg.INSTANCE_CATEGORY_NAMES[predicted["labels"][i]]
 
         if length and width != np.nan:
@@ -141,7 +131,8 @@ def prepare_paths(args):
 
 def load_model():
     model = keypoint_detector()
-    model.load_state_dict(torch.load(cfg.MODEL_PATH))
+    checkpoint = torch.load(cfg.MODEL_PATH)["model"]
+    model.load_state_dict(checkpoint)
 
     return model
 

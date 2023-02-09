@@ -50,18 +50,19 @@ def scale_rotate(img, keypoints, bboxes, labels, max_angle=360, scale_range=(0.7
         bboxes_tr.append(np.array([x1, y1, x2, y2]))
 
     # rotate keypoints, remove redundant labels
-    keypoints[:, :, 2] = 1
+    ones = np.ones((keypoints.shape[0], 1))
+    keypoints = np.concatenate((keypoints, ones), axis=1)
+    keypoints = keypoints.reshape(-1, keypoints_num, 3)
+
     keypoints_tr, labels_tr = [], []
     for i in range(len(keypoints)):
         if i not in remove_ind:
             keypoints_tr.append(np.dot(M, keypoints[i].T).T)
-            labels_tr.append(labels[i])
+            labels_tr.append(labels[int(i / keypoints_num)])
 
     keypoints_tr = np.round(np.array(keypoints_tr))
-    visible = np.ones((keypoints_tr.shape[0], keypoints_num, 1)) * 2
-    keypoints_tr = np.dstack((keypoints_tr, visible))
 
-    return img, keypoints_tr, np.array(bboxes_tr), labels_tr
+    return img, keypoints_tr[:, :, :2], np.array(bboxes_tr), labels_tr
 
 
 def tensor2rgb(img):
@@ -72,6 +73,27 @@ def tensor2rgb(img):
 
 def calc_dist(pt1, pt2):
     return np.sqrt(np.sum(np.square(pt1 - pt2)))
+
+
+def calc_dist_tenor(pt1, pt2):
+    return torch.sqrt(torch.sum(torch.square(pt1 - pt2)))
+
+
+def calc_dimensions(length_pts, width_pts, scale_ratio):
+    points = width_pts.astype(np.uint64)
+    right, left = points
+    width = calc_dist(left, right) * scale_ratio
+    len_parts = [calc_dist(length_pts[i], length_pts[i + 1]) for i in range(len(length_pts) - 1)]
+    length = np.sum(np.asarray(len_parts)) * scale_ratio
+    return length, width
+
+
+def calc_dimensions_tensor(length_pts, width_pts, scale_ratio):
+    right, left = width_pts
+    width = calc_dist_tenor(left, right) * scale_ratio
+    len_parts = [calc_dist_tenor(length_pts[i], length_pts[i + 1]) for i in range(len(length_pts) - 1)]
+    length = torch.sum(torch.tensor(len_parts)) * scale_ratio
+    return length, width
 
 
 def assign_prediction2ground_truth(pred_bboxes, targets_bboxes, iou_thresh=0.5):
@@ -108,7 +130,8 @@ def calc_oks(predictions, targets, img_sizes):
         oks_sum = 0
         total_pts = 0
         # TODO: define kappa parameters
-        k = torch.tensor([0.025, 0.072, 0.072, 0.072, 0.025, 0.062, 0.062])
+        k = torch.tensor([0.05, 0.144, 0.144, 0.144, 0.05, 0.124, 0.124])
+        # k = torch.tensor([0.025, 0.072, 0.072, 0.072, 0.025, 0.062, 0.062])
         for prediction, target, img_size in zip(predictions, targets, img_sizes):
             if len(prediction["boxes"]) > 0:
                 pred, targ = get_assigned_data(prediction, target)

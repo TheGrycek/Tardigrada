@@ -11,6 +11,7 @@ import keypoints_detector.config as cfg
 
 def keypointrcnn_loss(keypoint_logits, proposals, gt_keypoints, keypoint_matched_idxs):
     """Function from torchvision.models.detection.roi_heads"""
+
     N, K, H, W = keypoint_logits.shape
     if H != W:
         raise ValueError(
@@ -34,8 +35,8 @@ def keypointrcnn_loss(keypoint_logits, proposals, gt_keypoints, keypoint_matched
         return keypoint_logits.sum() * 0
 
     keypoint_logits = keypoint_logits.view(N * K, H * W)
-
     keypoint_loss = F.cross_entropy(keypoint_logits[valid], keypoint_targets[valid])
+
     return keypoint_loss
 
 
@@ -157,7 +158,9 @@ def keypoint_detector(num_classes=cfg.CLASSES_NUMBER,
                                       rpn_score_thresh=rpn_score_thresh,
                                       box_score_thresh=box_score_thresh,
                                       rpn_anchor_generator=anchor_generator,
-                                      box_detections_per_img=box_detections_per_img
+                                      box_detections_per_img=box_detections_per_img,
+                                      image_mean=[0.4950728416442871, 0.5257152915000916, 0.5137858986854553],
+                                      image_std=[0.08277688175439835, 0.0893404483795166, 0.08817232400178909]
                                       )
 
     model.roi_heads.forward = types.MethodType(forward, model.roi_heads)

@@ -49,8 +49,6 @@ class KeypointsDataset(Dataset):
             y_min = coco_elem['bbox'][1]
             x_max = x_min + coco_elem['bbox'][2]
             y_max = y_min + coco_elem['bbox'][3]
-            if x_min == x_max or y_min == y_max:
-                continue
 
             bboxes.append([x_min, y_min, x_max, y_max])
             keypoints.append(np.asarray(coco_elem['keypoints']).reshape((self.points_num, 3))[:, :2])
@@ -82,17 +80,18 @@ class KeypointsDataset(Dataset):
                   alb.Blur(blur_limit=5, p=1),
                   alb.GaussNoise(p=1),
                   alb.CLAHE(p=1),
-                  alb.RandomGamma(p=1),
-                  alb.Downscale(scale_min=0.25, scale_max=0.75, p=1),
                   alb.FancyPCA(alpha=0.1, p=1),
                   ]
         transform = alb.Compose([
+            alb.SmallestMaxSize(max_size=800, interpolation=1),
             alb.Affine(interpolation=3, p=0.9),
-            *[alb.OneOf(one_of, p=0.6) for _ in range(3)],
-            alb.ColorJitter(brightness=0.6, contrast=0.6, saturation=0.6, hue=0.6, p=0.7),
-            alb.ChannelShuffle(p=0.5),
-            alb.RGBShift(p=0.5),
-            ],
+            alb.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.2, p=0.7),
+            *[alb.OneOf(one_of, p=0.3) for _ in range(3)],
+            alb.RandomShadow(shadow_roi=(0, 0, 1, 1),
+                             num_shadows_lower=2, num_shadows_upper=5, shadow_dimension=5, p=0.5),
+            alb.RandomSunFlare(flare_roi=(0, 0, 1, 1), angle_lower=0, angle_upper=1, num_flare_circles_lower=2,
+                               num_flare_circles_upper=6, src_radius=200, p=0.5),
+        ],
             keypoint_params=alb.KeypointParams(format='xy', remove_invisible=False),
             bbox_params=alb.BboxParams(format='pascal_voc', min_area=self.min_area,
                                        min_visibility=self.min_visibility, label_fields=['bboxes_labels'])
@@ -189,14 +188,14 @@ def check_examples():
             img = cv2.rectangle(img.copy(), pt1, pt2, (255, 0, 0), 2)
             for keypoint in obj_keypoints:
                 center = (int(round(keypoint[0].item())), int(round(keypoint[1].item())))
-                img = cv2.circle(img.copy(), center, 2, (0, 0, 255), 5)
+                img = cv2.circle(img.copy(), center, 4, (0, 100, 255), 5)
 
         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-        img = cv2.resize(img, None, fx=0.7, fy=0.7)
-        cv2.imshow("img", cv2.resize(img, (0, 0), fx=0.5, fy=0.5))
-        cv2.waitKey(1500)
+        # img = cv2.resize(img, None, fx=0.5, fy=0.5)
+        cv2.imshow("img", img)
+        cv2.waitKey(3500)
 
 
 if __name__ == '__main__':
-    # get_normalization_params()
+    get_normalization_params()
     check_examples()
