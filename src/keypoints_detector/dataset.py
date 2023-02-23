@@ -10,7 +10,7 @@ from pycocotools.coco import COCO
 from torch.utils.data import Dataset, DataLoader
 
 import keypoints_detector.config as cfg
-from keypoints_detector.utils import tensor2rgb
+from keypoints_detector.utils import tensor2rgb, random_bbox_crop_roi
 
 seed = 123
 random.seed(123)
@@ -24,8 +24,8 @@ class KeypointsDataset(Dataset):
         self.ids = list(sorted(self.coco.imgs.keys()))
         self.transforms = transforms
         self.points_num = cfg.KEYPOINTS
-        self.min_area = 100
-        self.min_visibility = 0.1
+        self.min_area = 25
+        self.min_visibility = 0.8
 
     def __len__(self):
         return len(self.ids)
@@ -57,11 +57,13 @@ class KeypointsDataset(Dataset):
             iscrowd.append(coco_elem["iscrowd"])
 
         if self.transforms:
-            img, bboxes, keypoints, labels = self.augment(img, bboxes, np.asarray(keypoints).reshape(-1, 2), labels)
-
-        keypoints = np.asarray(keypoints).reshape((-1, self.points_num, 2))
-        visibility = np.ones((keypoints.shape[0], self.points_num, 1)) * 2
-        keypoints = np.concatenate((keypoints, visibility), axis=2)
+            img, bboxes, keypoints = self.augment(img,
+                                                  np.asarray(bboxes),
+                                                  np.asarray(keypoints).reshape(-1, 2))
+        else:
+            keypoints = np.asarray(keypoints).reshape((-1, self.points_num, 2))
+            visibility = np.ones((keypoints.shape[0], self.points_num, 1)) * 2
+            keypoints = np.concatenate((keypoints, visibility), axis=2)
 
         annotation = {"image_id": torch.tensor([img_id]),
                       "boxes": torch.as_tensor(np.asarray(bboxes), dtype=torch.int16),
@@ -75,30 +77,68 @@ class KeypointsDataset(Dataset):
     def set_transforms(self, transforms):
         self.transforms = transforms
 
-    def augment(self, img, bboxes, keypoints, labels):
-        one_of = [alb.ImageCompression(p=1),
-                  alb.Blur(blur_limit=5, p=1),
-                  alb.GaussNoise(p=1),
-                  alb.CLAHE(p=1),
-                  alb.FancyPCA(alpha=0.1, p=1),
-                  ]
-        transform = alb.Compose([
-            alb.SmallestMaxSize(max_size=800, interpolation=1),
-            alb.Affine(interpolation=3, p=0.9),
-            alb.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.2, p=0.7),
-            *[alb.OneOf(one_of, p=0.3) for _ in range(3)],
-            alb.RandomShadow(shadow_roi=(0, 0, 1, 1),
-                             num_shadows_lower=2, num_shadows_upper=5, shadow_dimension=5, p=0.5),
-            alb.RandomSunFlare(flare_roi=(0, 0, 1, 1), angle_lower=0, angle_upper=1, num_flare_circles_lower=2,
-                               num_flare_circles_upper=6, src_radius=200, p=0.5),
-        ],
-            keypoint_params=alb.KeypointParams(format='xy', remove_invisible=False),
-            bbox_params=alb.BboxParams(format='pascal_voc', min_area=self.min_area,
-                                       min_visibility=self.min_visibility, label_fields=['bboxes_labels'])
-        )
-        transformed = transform(image=img, keypoints=keypoints, bboxes=bboxes, bboxes_labels=labels)
+    def augment(self, img, bboxes, keypoints):
+        bboxes_instance = [i for i in range(bboxes.shape[0])]
+        kpts_instance = [i for i in range(int(keypoints.shape[0] / self.points_num)) for _ in range(self.points_num)]
 
-        return transformed["image"], transformed['bboxes'], transformed["keypoints"], labels
+        while True:
+            one_of = [alb.ImageCompression(p=1),
+                      alb.Blur(blur_limit=10, p=1),
+                      alb.GaussNoise(p=1),
+                      alb.CLAHE(p=1),
+                      alb.FancyPCA(alpha=0.1, p=1),
+                      alb.MultiplicativeNoise(multiplier=(0.9, 1.1), p=1)
+                      ]
+            x_min, y_min, x_max, y_max = random_bbox_crop_roi(bboxes, img.shape)
+            transforms = [
+                alb.Crop(x_min=x_min, y_min=y_min, x_max=x_max, y_max=y_max, p=0.5),
+                alb.SmallestMaxSize(max_size=800,
+                                    interpolation=1),
+                *[alb.RandomRotate90(p=0.3) for _ in range(3)],
+                alb.Affine(interpolation=3,
+                           rotate_method="ellipse",
+                           p=0.9),
+                alb.RandomShadow(shadow_roi=(0, 0, 1, 1),
+                                 num_shadows_lower=2,
+                                 num_shadows_upper=5,
+                                 shadow_dimension=5,
+                                 p=0.5),
+                alb.RandomSunFlare(flare_roi=(0, 0, 1, 1),
+                                   angle_lower=0,
+                                   angle_upper=1,
+                                   num_flare_circles_lower=2,
+                                   num_flare_circles_upper=6,
+                                   src_radius=200,
+                                   p=0.5),
+                alb.ColorJitter(brightness=0.2,
+                                contrast=0.2,
+                                saturation=0.2,
+                                hue=0.2,
+                                p=0.7),
+                *[alb.OneOf(one_of, p=0.5) for _ in range(3)]
+            ]
+
+            transform = alb.Compose(transforms,
+                                    keypoint_params=alb.KeypointParams(format='xy',
+                                                                       remove_invisible=False,
+                                                                       label_fields=['kpts_instance']),
+                                    bbox_params=alb.BboxParams(format='pascal_voc',
+                                                               min_area=self.min_area,
+                                                               min_visibility=self.min_visibility,
+                                                               label_fields=['bboxes_instance']))
+            transformed = transform(image=img,
+                                    keypoints=keypoints,
+                                    bboxes=bboxes,
+                                    bboxes_instance=bboxes_instance,
+                                    kpts_instance=kpts_instance)
+
+            keypoints_ = np.asarray(transformed["keypoints"]).reshape((-1, self.points_num, 2))
+            visibility_ = np.ones((keypoints_.shape[0], self.points_num, 1)) * 2
+            keypoints_ = np.concatenate((keypoints_, visibility_), axis=2)
+            keypoints_ = keypoints_[transformed['bboxes_instance']]
+
+            if len(transformed['bboxes']) > 0:
+                return transformed["image"], transformed['bboxes'], keypoints_
 
 
 def collate_function(batch):
@@ -111,17 +151,26 @@ def seed_worker(worker_id):
     random.seed(worker_seed)
 
 
-def create_dataloaders(images_dir=cfg.IMAGES_PATH, annotation_file=cfg.ANNOTATION_FILE_PATH,
-                       transform_train=True, transform_val=False, transform_test=False,
-                       shuffle_train=True, shuffle_val=False, shuffle_test=False,
-                       val_ratio=cfg.VAL_RATIO, test_ratio=cfg.TEST_RATIO, batch_size=cfg.BATCH_SIZE):
+def create_dataloaders(
+        images_dir=cfg.IMAGES_PATH,
+        annotation_file=cfg.ANNOTATION_FILE_PATH,
+        transform_train=True,
+        transform_val=False,
+        transform_test=False,
+        shuffle_train=True,
+        shuffle_val=False,
+        shuffle_test=False,
+        val_ratio=cfg.VAL_RATIO,
+        test_ratio=cfg.TEST_RATIO,
+        batch_size=cfg.BATCH_SIZE, tile=False
+):
 
-    dataset = KeypointsDataset(images_dir=images_dir, annotation_file=annotation_file)
+    dataset = KeypointsDataset(images_dir=images_dir, annotation_file=annotation_file, tile=tile)
     total_cnt = dataset.__len__()
     val_cnt = int(val_ratio * total_cnt)
     test_cnt = int(test_ratio * total_cnt)
     train_cnt = total_cnt - val_cnt - test_cnt
-    generator = torch.Generator().manual_seed(1)
+    generator = torch.Generator().manual_seed(seed)
 
     print(f"\nTRAINING IMAGES NUMBER: {train_cnt}\n"
           f"VALIDATION IMAGES NUMBER: {val_cnt}\n"
@@ -142,10 +191,16 @@ def create_dataloaders(images_dir=cfg.IMAGES_PATH, annotation_file=cfg.ANNOTATIO
     for name, (subset, transform, shuffle) in datasets.items():
         if len(subset) > 0:
             # TODO: refactor to not override dataset classes
-            subset.dataset = KeypointsDataset(images_dir=images_dir, annotation_file=annotation_file,
-                                              transforms=transform)
-            dataloaders[name] = DataLoader(dataset=subset, collate_fn=collate_function, batch_size=batch_size,
-                                           shuffle=shuffle, num_workers=cfg.NUM_WORKERS, worker_init_fn=seed_worker,
+            subset.dataset = KeypointsDataset(images_dir=images_dir,
+                                              annotation_file=annotation_file,
+                                              transforms=transform,
+                                              tile=tile)
+            dataloaders[name] = DataLoader(dataset=subset,
+                                           collate_fn=collate_function,
+                                           batch_size=batch_size,
+                                           shuffle=shuffle,
+                                           num_workers=cfg.NUM_WORKERS,
+                                           worker_init_fn=seed_worker,
                                            generator=generator)
         else:
             dataloaders[name] = None
@@ -154,8 +209,12 @@ def create_dataloaders(images_dir=cfg.IMAGES_PATH, annotation_file=cfg.ANNOTATIO
 
 
 def get_normalization_params(images_dir=cfg.IMAGES_PATH, annotation_file=cfg.ANNOTATION_FILE_PATH):
-    dataloader = create_dataloaders(images_dir=images_dir, annotation_file=annotation_file, transform_train=False,
-                                    shuffle_train=False, val_ratio=cfg.VAL_RATIO, test_ratio=cfg.TEST_RATIO,
+    dataloader = create_dataloaders(images_dir=images_dir,
+                                    annotation_file=annotation_file,
+                                    transform_train=False,
+                                    shuffle_train=False,
+                                    val_ratio=cfg.VAL_RATIO,
+                                    test_ratio=cfg.TEST_RATIO,
                                     batch_size=1)
     mean, std, imgs_num = 0, 0, 0
 
@@ -187,13 +246,13 @@ def check_examples():
             pt1, pt2 = tuple(bbox[:2]), tuple(bbox[2:])
             img = cv2.rectangle(img.copy(), pt1, pt2, (255, 0, 0), 2)
             for keypoint in obj_keypoints:
-                center = (int(round(keypoint[0].item())), int(round(keypoint[1].item())))
+                center = (int(keypoint[0]), int(keypoint[1]))
                 img = cv2.circle(img.copy(), center, 4, (0, 100, 255), 5)
 
         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
         # img = cv2.resize(img, None, fx=0.5, fy=0.5)
         cv2.imshow("img", img)
-        cv2.waitKey(3500)
+        cv2.waitKey(1500)
 
 
 if __name__ == '__main__':

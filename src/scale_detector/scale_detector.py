@@ -40,14 +40,17 @@ def filter_cnts(cnts, scale_pts):
         bbox_len = rect[2] if text_len == l else rect[3]
         if bbox_len < text_len:
             continue
-        overlap_perc = calc_overlap_perc([p1[0], p2[0], p1[1], p4[1]],
-                                         [rect[0], rect[0] + rect[2], rect[1], rect[1] + rect[3]])
+
+        bbox1 = [p1[0], p2[0], p1[1], p4[1]]
+        bbox2 = [rect[0], rect[0] + rect[2], rect[1], rect[1] + rect[3]]
+        overlap_perc = calc_overlap_perc(bbox1, bbox2)
         if overlap_perc > 0.5:
             continue
 
         rect_tilted = cv2.minAreaRect(cnt)
         if rect_tilted[1][0] == 0 or rect_tilted[1][1] == 0:
             continue
+
         if 0.5 < rect_tilted[1][0] / rect_tilted[1][1] < 2:
             continue
 
@@ -69,7 +72,9 @@ def simple_segmenter(img, scale_pts):
 
 def select_bbox(bboxes, scale_pts, img):
     p1, p2, p3, p4 = scale_pts
-    text_center = np.array([abs(p1[0] - p2[0]) / 2 + p1[0], abs(p1[1] - p4[1]) / 2 + p1[1]])
+    x_c = abs(p1[0] - p2[0]) / 2 + p1[0]
+    y_c = abs(p1[1] - p4[1]) / 2 + p1[1]
+    text_center = np.array([x_c, y_c])
 
     def calc_dist(bbox):
         x, y, w, h = bbox
@@ -79,10 +84,11 @@ def select_bbox(bboxes, scale_pts, img):
     bboxes = sorted(bboxes, key=calc_dist, reverse=False)
     for x, y, w, h in bboxes:
         img = cv2.rectangle(img.copy(), (x, y), (x + w, y + h), (0, 0, 255), 2)
+
     return bboxes[0]
 
 
-def read_scale(img, device="cpu"):
+def read_scale(img, device="cpu", visualize=False):
     reader = Reader(['en'], gpu=True if device == "gpu" else False)
     result = reader.readtext(img,
                              allowlist=["u", "m", "c"] + [str(i) for i in range(10)],
@@ -101,11 +107,12 @@ def read_scale(img, device="cpu"):
 
     scale_value = change_to_um(result[0][1])
     x, y, w, h = select_bbox(bboxes, result[0][0], img)
-
-    img = cv2.rectangle(img.copy(), (x, y), (x + w, y + h), (0, 0, 255), 2)
-    img = cv2.putText(img, 'scale', (x, y), cv2.FONT_HERSHEY_SIMPLEX,
-                      1, (255, 0, 0), 2, cv2.LINE_AA)
-
     output = {"um": scale_value, "bbox": [x, y, x + w, y + h]}
 
-    return output, img
+    if visualize:
+        img = cv2.rectangle(img.copy(), (x, y), (x + w, y + h), (0, 0, 255), 2)
+        img = cv2.putText(img, 'scale', (x, y), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
+
+        return output, img
+
+    return output, None

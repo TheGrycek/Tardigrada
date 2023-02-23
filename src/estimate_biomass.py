@@ -8,12 +8,11 @@ from pathlib import Path
 import cv2
 import numpy as np
 import pandas as pd
-import torch
 import ujson
 from scipy.interpolate import splprep, splev
 
 import keypoints_detector.config as cfg
-from keypoints_detector.model import keypoint_detector
+from keypoints_detector.model import KeypointDetector
 from keypoints_detector.predict import predict
 from keypoints_detector.utils import calc_dist, calc_dimensions
 from scale_detector.scale_detector import read_scale
@@ -129,25 +128,20 @@ def prepare_paths(args):
     return images_paths
 
 
-def load_model():
-    model = keypoint_detector()
-    checkpoint = torch.load(cfg.MODEL_PATH)["model"]
-    model.load_state_dict(checkpoint)
-
-    return model
-
-
-def run_inference(args, queue, stop):
+def run_inference(args, queue, stop, image_scale=None):
     images_paths = prepare_paths(args)
-    model = load_model()
+    model = KeypointDetector()
     for i, img_path in enumerate(images_paths, start=1):
         if stop():
             queue.put("Processing stopped.\n")
             break
         try:
             img = cv2.imread(str(img_path), 1)
-            image_scale, _ = read_scale(img, device="cpu")
-            predicted = predict(model, img, device=cfg.DEVICE)
+
+            if image_scale is None:
+                image_scale, _ = read_scale(img, device="cpu")
+
+            predicted = predict(model, img)
             out_dict = {
                 "path": str(img_path),
                 "scale_bbox": image_scale["bbox"],
@@ -207,14 +201,14 @@ def run_calc_mass(args, queue, stop):
 
 def visualize(args):
     images_paths = prepare_paths(args)
-    model = load_model()
+    model = KeypointDetector()
 
     for img_path in images_paths:
         try:
             start = time.time()
             img = cv2.imread(str(img_path), 1)
-            image_scale, img = read_scale(img, device="cpu")
-            predicted = predict(model, img, device=cfg.DEVICE)
+            image_scale, img = read_scale(img, device="cpu", visualize=True)
+            predicted = predict(model, img)
             results_df, lengths_points = calculate_mass(predicted, image_scale, img_path)
 
             img = predicted["image"]

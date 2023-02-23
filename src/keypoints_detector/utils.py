@@ -71,28 +71,26 @@ def tensor2rgb(img):
     return np.swapaxes(img, 1, 2)
 
 
-def calc_dist(pt1, pt2):
+def calc_dist(pt1, pt2, tensor=False):
+    if tensor:
+        return torch.sqrt(torch.sum(torch.square(pt1 - pt2)))
+
     return np.sqrt(np.sum(np.square(pt1 - pt2)))
 
 
-def calc_dist_tenor(pt1, pt2):
-    return torch.sqrt(torch.sum(torch.square(pt1 - pt2)))
+def calc_dimensions(length_pts, width_pts, scale_ratio, tensor=False):
+    if not tensor:
+        width_pts = width_pts.astype(np.uint64)
 
-
-def calc_dimensions(length_pts, width_pts, scale_ratio):
-    points = width_pts.astype(np.uint64)
-    right, left = points
-    width = calc_dist(left, right) * scale_ratio
-    len_parts = [calc_dist(length_pts[i], length_pts[i + 1]) for i in range(len(length_pts) - 1)]
-    length = np.sum(np.asarray(len_parts)) * scale_ratio
-    return length, width
-
-
-def calc_dimensions_tensor(length_pts, width_pts, scale_ratio):
     right, left = width_pts
-    width = calc_dist_tenor(left, right) * scale_ratio
-    len_parts = [calc_dist_tenor(length_pts[i], length_pts[i + 1]) for i in range(len(length_pts) - 1)]
-    length = torch.sum(torch.tensor(len_parts)) * scale_ratio
+    width = calc_dist(left, right, tensor=tensor) * scale_ratio
+    len_parts = [calc_dist(length_pts[i], length_pts[i + 1], tensor=tensor) for i in range(len(length_pts) - 1)]
+
+    if tensor:
+        length = torch.sum(torch.tensor(len_parts)) * scale_ratio
+    else:
+        length = np.sum(np.asarray(len_parts)) * scale_ratio
+
     return length, width
 
 
@@ -130,14 +128,14 @@ def calc_oks(predictions, targets, img_sizes):
         oks_sum = 0
         total_pts = 0
         # TODO: define kappa parameters
-        k = torch.tensor([0.05, 0.144, 0.144, 0.144, 0.05, 0.124, 0.124])
+        k = torch.tensor([1, 1, 1, 1, 1, 1, 1])
         # k = torch.tensor([0.025, 0.072, 0.072, 0.072, 0.025, 0.062, 0.062])
         for prediction, target, img_size in zip(predictions, targets, img_sizes):
             if len(prediction["boxes"]) > 0:
                 pred, targ = get_assigned_data(prediction, target)
                 ws = torch.abs(targ["boxes"][:, 0] - targ["boxes"][:, 2])
                 hs = torch.abs(targ["boxes"][:, 1] - targ["boxes"][:, 3])
-                scales = ws * hs / np.sum(img_size)
+                scales = (ws * hs) / np.prod(img_size)
                 distances = (pred["keypoints"] - targ["keypoints"]).pow(2).sum(2).sqrt()
                 kappa = torch.stack([k for _ in range(len(scales))])
 
@@ -177,3 +175,56 @@ def create_losses_dict():
     losses = OrderedDict({key: [] for key in losses_names})
 
     return losses_names, losses
+
+
+def tile_image(img, side=500, tile_padding=150):
+    h, w, c = img.shape
+    pad = (2 * tile_padding)
+    tile_size = side + pad
+    row_num, col_num = int(np.ceil(h / side)), int(np.ceil(w / side))
+    resize_ratios = (row_num * tile_size / h, col_num * tile_size / w)
+
+    img_resized = cv2.resize(img, (col_num * side, row_num * side))
+    row_centers = np.linspace(tile_padding + (side / 2), row_num * side - tile_padding - (side / 2), num=row_num)
+    col_centers = np.linspace(tile_padding + (side / 2), col_num * side - tile_padding - (side / 2), num=col_num)
+
+    tiles = []
+    for row in range(row_num):
+        tiles_col = []
+        for col in range(col_num):
+            y_min = int(row_centers[row] - (tile_size / 2))
+            y_max = int(row_centers[row] + (tile_size / 2))
+            x_min = int(col_centers[col] - (tile_size / 2))
+            x_max = int(col_centers[col] + (tile_size / 2))
+            img_crop = img_resized[y_min: y_max, x_min: x_max, :]
+
+            tiles_col.append(img_crop)
+        tiles.append(tiles_col)
+
+    return tiles, resize_ratios
+
+
+def random_bbox_crop_roi(bboxes, img_shape, side_len=800):
+    if img_shape[0] < side_len or img_shape[1] < side_len:
+        return np.array([0, 0, img_shape[1], img_shape[0]])
+
+    bbox = bboxes[random.randint(0, bboxes.shape[0] - 1)]
+    half_len = (side_len // 2)
+
+    x_center = np.mean([bbox[[0, 2]]])
+    y_center = np.mean([bbox[[1, 3]]])
+
+    crop = np.array([x_center - half_len,
+                     y_center - half_len,
+                     x_center + half_len,
+                     y_center + half_len], dtype=int)
+
+    d_x_left = min([0, crop[0]])
+    d_x_right = min([0, img_shape[1] - crop[2]])
+    d_y_top = min([0, crop[1]])
+    d_y_bot = min([0, img_shape[0] - crop[3]])
+
+    crop[[0, 2]] += abs(d_x_left) - abs(d_x_right)
+    crop[[1, 3]] += abs(d_y_top) - abs(d_y_bot)
+
+    return crop

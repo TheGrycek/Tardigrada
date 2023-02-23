@@ -4,9 +4,10 @@ import torch
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-REPO_ROOT = os.environ["REPO_ROOT"] if "REPO_ROOT" in os.environ else "tarmass"
-ANNOTATION_FILE_PATH = f"/{REPO_ROOT}/src/images/train/dataset_100/TardigradaNew.json"
-IMAGES_PATH = f"/{REPO_ROOT}/src/images/train/dataset_100"
+# REPO_ROOT = os.environ["REPO_ROOT"] if "REPO_ROOT" in os.environ else "tarmass"
+REPO_ROOT = "/home/grycek/Desktop/repos/Tardigrada"
+ANNOTATION_FILE_PATH = f"/{REPO_ROOT}/src/images/train/dataset_291/TardigradaNew_291.json"
+IMAGES_PATH = f"/{REPO_ROOT}/src/images/train/dataset_291"
 MODEL_PATH = f"/{REPO_ROOT}/src/keypoints_detector/checkpoints/keypoints_detector_best.pth"
 
 KEYPOINTS = 7
@@ -22,15 +23,16 @@ LOSS_WEIGHTS = {
 CHECKPOINT_SAVE_INTERVAL = 20
 
 # OPTIMIZER
-LEARNING_RATE = 0.0001
-MOMENTUM = 0.1
+LEARNING_RATE = 0.001
+MOMENTUM = 0.9
 DAMPENING = 0.0
-WEIGHT_DECAY = 0.0
+WEIGHT_DECAY = 0.0001
 NESTEROV = False
 # SCHEDULER
 GAMMA = 0.5
-MILESTONES = [700, 800]
-EPOCHS = 1000
+# MILESTONES = [700, 800]
+MILESTONES = []
+EPOCHS = 200
 # DATALOADERS
 BATCH_SIZE = 1
 TEST_RATIO = 0.1

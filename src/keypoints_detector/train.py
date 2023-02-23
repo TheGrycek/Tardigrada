@@ -154,7 +154,6 @@ def initialize_training_elements(args):
                                      val_ratio=cfg.VAL_RATIO,
                                      test_ratio=cfg.TEST_RATIO,
                                      transform_train=True)
-
     scheduler = lr_scheduler.MultiStepLR(optimizer,
                                          milestones=cfg.MILESTONES,
                                          gamma=cfg.GAMMA)
