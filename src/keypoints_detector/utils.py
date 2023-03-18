@@ -95,19 +95,30 @@ def calc_dimensions(length_pts, width_pts, scale_ratio, tensor=False):
 
 
 def assign_prediction2ground_truth(pred_bboxes, targets_bboxes, iou_thresh=0.5):
-    ious = box_iou(targets_bboxes, pred_bboxes)
-    max_args = torch.argmax(ious, dim=1)
+    out = np.zeros((targets_bboxes.shape[0])) - 1
+    ious = box_iou(pred_bboxes, targets_bboxes)
 
-    for i in range(len(max_args)):
-        if ious[i][max_args[i]] < iou_thresh:
-            max_args[i] = -1
+    for i in range(targets_bboxes.shape[0]):
+        max_arg = torch.argmax(ious)
+        row = (torch.div(max_arg, targets_bboxes.shape[0], rounding_mode='floor')).item()
+        col = (max_arg - (row * targets_bboxes.shape[0])).item()
 
-    return max_args
+        if row in out:
+            continue
+
+        if ious[row, col].item() > iou_thresh:
+            out[col] = int(row)
+
+        ious[row, :] = 0
+        ious[:, col] = 0
+
+    return out
 
 
 def get_assigned_data(prediction, target):
     idx = assign_prediction2ground_truth(prediction["boxes"], target["boxes"])
-    # TODO: resolve error with target["keypoints"][:, :, :2][idx[idx >= 0], :, :]
+
+    # TODO: check correctness
 
     prediction_assigned = {
         "keypoints": prediction["keypoints"][:, :, :2][idx[idx >= 0], :, :],
@@ -116,22 +127,22 @@ def get_assigned_data(prediction, target):
     }
 
     target_assigned = {
-        "keypoints": target["keypoints"][:, :, :2][idx[idx >= 0], :, :],
-        "boxes": target["boxes"][idx[idx >= 0], :]
+        "keypoints": target["keypoints"][:, :, :2][idx >= 0],
+        "boxes": target["boxes"][idx >= 0]
     }
     return prediction_assigned, target_assigned
 
 
 def calc_oks(predictions, targets, img_sizes):
     """Calculate object keypoint similarity"""
-    try:
-        oks_sum = 0
-        total_pts = 0
-        # TODO: define kappa parameters
-        k = torch.tensor([1, 1, 1, 1, 1, 1, 1])
-        # k = torch.tensor([0.025, 0.072, 0.072, 0.072, 0.025, 0.062, 0.062])
-        for prediction, target, img_size in zip(predictions, targets, img_sizes):
-            if len(prediction["boxes"]) > 0:
+    oks_sum = 0
+    total_pts = 0
+    # TODO: define kappa parameters
+    k = torch.tensor([1., 1., 1., 1., 1., 1., 1.])
+    # k = torch.tensor([0.025, 0.072, 0.072, 0.072, 0.025, 0.062, 0.062])
+    for prediction, target, img_size in zip(predictions, targets, img_sizes):
+        if len(prediction["boxes"]) > 0:
+            try:
                 pred, targ = get_assigned_data(prediction, target)
                 ws = torch.abs(targ["boxes"][:, 0] - targ["boxes"][:, 2])
                 hs = torch.abs(targ["boxes"][:, 1] - targ["boxes"][:, 3])
@@ -141,12 +152,10 @@ def calc_oks(predictions, targets, img_sizes):
 
                 oks_sum += torch.exp(-(distances ** 2) / (2 * (scales.unsqueeze(1) ** 2) * (kappa ** 2))).sum()
                 total_pts += target["keypoints"][:, :, 0].numel()
+            except:
+                pass
 
-        return oks_sum / total_pts if total_pts > 0 else 0
-
-    except Exception as e:
-        # logging.exception(e)
-        return 0
+    return oks_sum / total_pts if total_pts > 0 else 0
 
 
 def set_reproducibility_params():

@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import os
 from argparse import ArgumentParser
 from pathlib import Path
 
@@ -10,13 +9,13 @@ from ray import tune
 
 import keypoints_detector.config as cfg
 from keypoints_detector.dataset import create_dataloaders
-from keypoints_detector.model import keypoint_detector
-from keypoints_detector.predict import run_testing
+from keypoints_detector.model import keypoint_detector, KeypointDetector
+from keypoints_detector.test import test
 from keypoints_detector.train import train_one_batch, validate
 from keypoints_detector.utils import set_reproducibility_params, create_losses_dict
 
 set_reproducibility_params()
-os.environ["TUNE_DISABLE_STRICT_METRIC_CHECKING"] = "1"
+# os.environ["TUNE_DISABLE_STRICT_METRIC_CHECKING"] = "1"
 
 
 def parse_args():
@@ -37,8 +36,10 @@ def check_training_params(config):
                                 weight_decay=config["weight_decay"],
                                 momentum=config["momentum"])
 
-    dataloaders = create_dataloaders(images_dir=str(cfg.IMAGES_PATH), annotation_file=str(cfg.ANNOTATION_FILE_PATH),
-                                     val_ratio=cfg.VAL_RATIO, test_ratio=cfg.TEST_RATIO)
+    dataloaders = create_dataloaders(images_dir=str(cfg.IMAGES_PATH),
+                                     annotation_file=str(cfg.ANNOTATION_FILE_PATH),
+                                     val_ratio=cfg.VAL_RATIO,
+                                     test_ratio=cfg.TEST_RATIO)
 
     losses_names, _ = create_losses_dict()
     model.train()
@@ -57,8 +58,13 @@ def check_training_params(config):
 
 
 def check_inference_params(config):
-    test_results = run_testing(images_path=cfg.IMAGES_PATH, annotation_path=cfg.ANNOTATION_FILE_PATH,
-                               model_path=cfg.MODEL_PATH, model_config=config)
+    model = KeypointDetector(model_path=cfg.MODEL_PATH, **config)
+    dataloaders = create_dataloaders(images_dir=str(cfg.IMAGES_PATH),
+                                     annotation_file=str(cfg.ANNOTATION_FILE_PATH),
+                                     val_ratio=cfg.VAL_RATIO,
+                                     test_ratio=cfg.TEST_RATIO)
+
+    test_results = test(model, dataloaders["test"], cfg.DEVICE, tile_detector=True)[0]
     tune.report(map_50=test_results["map_50"], oks=test_results["oks"])
 
 
@@ -85,6 +91,7 @@ def search_hyperparameters(args):
             "rpn_score_thresh": tune.uniform(0.0, 0.9),
             "box_score_thresh": tune.uniform(0.0, 0.9),
             "box_nms_thresh": tune.uniform(0.0, 0.9),
+            "tiling_nms_thresh": tune.uniform(0.1, 0.9),
         }
         metric = {
             "metric": "map_50",

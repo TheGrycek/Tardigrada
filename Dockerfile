@@ -2,7 +2,7 @@ FROM nvidia/cuda:11.3.1-cudnn8-runtime-ubuntu20.04 AS build
 ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends apt-utils build-essential pkg-config libssl-dev libffi-dev libxcb-xinerama0 \
+    apt-get install -y --no-install-recommends apt-utils build-essential pkg-config libssl-dev libffi-dev libxcb-xinerama0 git \
     python3-dev python3 python3.8-venv python3-pip && \
     apt-get clean && rm -rf /var/lib/apt/lists/* && \
     python3 -m venv /opt/venv

@@ -130,7 +130,7 @@ def prepare_paths(args):
 
 def run_inference(args, queue, stop, image_scale=None):
     images_paths = prepare_paths(args)
-    model = KeypointDetector()
+    model = KeypointDetector(tiling=True)
     for i, img_path in enumerate(images_paths, start=1):
         if stop():
             queue.put("Processing stopped.\n")

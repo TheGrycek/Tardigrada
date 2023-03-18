@@ -110,11 +110,11 @@ class KeypointsDataset(Dataset):
                                    num_flare_circles_upper=6,
                                    src_radius=200,
                                    p=0.5),
-                alb.ColorJitter(brightness=0.2,
-                                contrast=0.2,
-                                saturation=0.2,
-                                hue=0.2,
-                                p=0.7),
+                alb.ColorJitter(brightness=(0.5, 1.2),
+                                contrast=(0.2, 1.0),
+                                saturation=(0.2, 1.0),
+                                hue=(-0.5, 0.5),
+                                p=1),
                 *[alb.OneOf(one_of, p=0.5) for _ in range(3)]
             ]
 
@@ -165,7 +165,7 @@ def create_dataloaders(
         batch_size=cfg.BATCH_SIZE, tile=False
 ):
 
-    dataset = KeypointsDataset(images_dir=images_dir, annotation_file=annotation_file, tile=tile)
+    dataset = KeypointsDataset(images_dir=images_dir, annotation_file=annotation_file)
     total_cnt = dataset.__len__()
     val_cnt = int(val_ratio * total_cnt)
     test_cnt = int(test_ratio * total_cnt)
@@ -193,8 +193,7 @@ def create_dataloaders(
             # TODO: refactor to not override dataset classes
             subset.dataset = KeypointsDataset(images_dir=images_dir,
                                               annotation_file=annotation_file,
-                                              transforms=transform,
-                                              tile=tile)
+                                              transforms=transform)
             dataloaders[name] = DataLoader(dataset=subset,
                                            collate_fn=collate_function,
                                            batch_size=batch_size,

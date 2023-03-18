@@ -20,6 +20,7 @@ LOSS_WEIGHTS = {
     "loss_objectness": 1.0,
     "loss_rpn_box_reg": 1.0
 }
+RANDOM_LOSS_WEIGHTS = False
 CHECKPOINT_SAVE_INTERVAL = 20
 
 # OPTIMIZER

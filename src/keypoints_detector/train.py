@@ -14,8 +14,9 @@ from torch.utils.tensorboard import SummaryWriter
 import keypoints_detector.config as cfg
 from keypoints_detector.dataset import create_dataloaders
 from keypoints_detector.model import keypoint_detector
-from keypoints_detector.predict import test
+from keypoints_detector.test import test
 from keypoints_detector.utils import set_reproducibility_params, create_losses_dict
+import torch.nn.functional as F
 
 set_reproducibility_params()
 writer = SummaryWriter("./runs/board_results")
@@ -67,7 +68,11 @@ def optimizer_to_device(optim, device):
 
 def train_one_batch(model, device, imgs, targets, optimizer, scheduler, epoch_losses, losses_names):
     loss_dict = model(*send_to_device(imgs, targets, device))
-    loss_total = sum(loss * cfg.LOSS_WEIGHTS[name] for name, loss in loss_dict.items())
+    if cfg.RANDOM_LOSS_WEIGHTS:
+        random_weights = F.softmax(torch.randn(len(cfg.LOSS_WEIGHTS)), dim=-1)
+        loss_total = sum(loss * random_weights[i] for i, loss in enumerate(loss_dict.values()))
+    else:
+        loss_total = sum(loss * cfg.LOSS_WEIGHTS[name] for name, loss in loss_dict.items())
 
     optimizer.zero_grad()
     loss_total.backward()
@@ -215,7 +220,7 @@ def train(args):
                             checkpoint_name=f"checkpoint_{epoch}.pth")
 
         model.eval()
-        test_metrics = test(model, dataloaders["val"])
+        test_metrics = test(model, dataloaders["val"])[0]
         add_tensorboard_scalars({key: value[-1] for key, value in epoch_losses.items()}, epoch)
         add_tensorboard_scalars(test_metrics, epoch)
 
@@ -233,7 +238,7 @@ def train(args):
     if args.save_plots_matplotlib:
         save_plots_plt(losses)
 
-    # TODO: fix img_example shape
+    # TODO: create onnx export
     # if args.export_onnx:
     #     torch.onnx.export(model, img_example, "checkpoints/keypoint_rcnn.onnx", verbose=True,
     #                       input_names=["input"], output_names=["output"])
