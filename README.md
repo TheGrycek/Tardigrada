@@ -2,9 +2,10 @@
 Automatic calculation of tardigrades biomass from microscopic images, using Deep Neural Networks.
 
 ### Build and run container
-To automatically build and run docker container, launch script:
+To automatically build and run docker container, launch scripts:
 ```bash
-./build_and_run_docker.sh
+./build_docker.sh
+./run_docker.sh
 ```
 
 To run GUI application:
