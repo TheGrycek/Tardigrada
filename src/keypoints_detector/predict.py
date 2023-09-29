@@ -12,7 +12,6 @@ def predict(model, img):
     scores = predicted["scores"].numpy()
     keypoints = predicted['keypoints'].numpy()
     keypoint_scores = predicted["keypoints_scores"].numpy()
-
     grouped_keypoints = np.round(keypoints, 0)[:, :, :2]
 
     for i, (label, bbox, points) in enumerate(zip(labels, bboxes, grouped_keypoints)):
