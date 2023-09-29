@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+
 import argparse
 import logging
 import time
@@ -7,13 +8,13 @@ from pathlib import Path
 import cv2
 import numpy as np
 import pandas as pd
-import torch
 import ujson
 from scipy.interpolate import splprep, splev
 
 import keypoints_detector.config as cfg
-from keypoints_detector.model import keypoint_detector
+from keypoints_detector.model import KeypointDetector
 from keypoints_detector.predict import predict
+from keypoints_detector.utils import calc_dist, calc_dimensions
 from scale_detector.scale_detector import read_scale
 
 
@@ -25,10 +26,6 @@ def parse_args():
                         help="Outputs directory.")
 
     return parser.parse_args()
-
-
-def calc_dist(pt1, pt2):
-    return np.sqrt(np.sum(np.square(pt1 - pt2)))
 
 
 def fit_polynomial(bbox, points, keypoints_num):
@@ -80,33 +77,20 @@ def fit_bspline(bbox, points, keypoints_num):
     return pts
 
 
-def calc_dimensions(length_pts, width_pts, scale_ratio):
-    points = width_pts.astype(np.uint64)
-    right, left = points
-    width = calc_dist(left, right) * scale_ratio
-    len_parts = [calc_dist(length_pts[i], length_pts[i + 1]) for i in range(len(length_pts) - 1)]
-    length = np.sum(np.asarray(len_parts)) * scale_ratio
-    return length, width
-
-
 def calculate_mass(predicted, scale, img_path, curve_fit_algorithm="bspline"):
     scale_ratio = scale["um"] / scale["bbox"][2]
     density = 1.04
     results = []
     lengths_points = []
-
-    if curve_fit_algorithm == "bspline":
-        fit_algorithm = fit_bspline
-    elif curve_fit_algorithm == "polynomial":
-        fit_algorithm = fit_polynomial
-    else:
-        raise Exception("Wrong curve fit algorithm name.")
+    fit_algorithms = {
+        "bspline": fit_bspline,
+        "polynomial": fit_polynomial
+    }
 
     for i, (bbox, points) in enumerate(zip(predicted["bboxes"], predicted["keypoints"])):
-        length_pts = fit_algorithm(bbox, points, cfg.KEYPOINTS)
+        length_pts = fit_algorithms[curve_fit_algorithm](bbox, points, cfg.KEYPOINTS)
         lengths_points.append(length_pts)
         length, width = calc_dimensions(length_pts, points[-2:], scale_ratio)
-
         class_name = cfg.INSTANCE_CATEGORY_NAMES[predicted["labels"][i]]
 
         if length and width != np.nan:
@@ -144,24 +128,20 @@ def prepare_paths(args):
     return images_paths
 
 
-def load_model():
-    model = keypoint_detector()
-    model.load_state_dict(torch.load("./keypoints_detector/checkpoints/keypoints_detector.pth"))
-
-    return model
-
-
-def run_inference(args, queue, stop):
+def run_inference(args, queue, stop, image_scale=None):
     images_paths = prepare_paths(args)
-    model = load_model()
+    model = KeypointDetector(tiling=True)
     for i, img_path in enumerate(images_paths, start=1):
         if stop():
             queue.put("Processing stopped.\n")
             break
         try:
             img = cv2.imread(str(img_path), 1)
-            image_scale, _ = read_scale(img, device="cpu")
-            predicted = predict(model, img, device=cfg.DEVICE)
+
+            if image_scale is None:
+                image_scale, _ = read_scale(img, device="cpu")
+
+            predicted = predict(model, img)
             out_dict = {
                 "path": str(img_path),
                 "scale_bbox": image_scale["bbox"],
@@ -209,7 +189,7 @@ def run_calc_mass(args, queue, stop):
             predicted["bboxes"].append(annot["bbox"])
             predicted["labels"].append(annot["label"])
 
-        predicted["keypoints"] = np.round(predicted["keypoints"], 0)[:, :, :2]
+        predicted["keypoints"] = np.round(predicted["keypoints"], 0)
         results_df, lengths_points = calculate_mass(predicted, image_scale, str(img_path))
         results_df.to_csv(args.output_dir / f"{img_path.stem}_results.csv")
 
@@ -221,14 +201,14 @@ def run_calc_mass(args, queue, stop):
 
 def visualize(args):
     images_paths = prepare_paths(args)
-    model = load_model()
+    model = KeypointDetector()
 
     for img_path in images_paths:
         try:
             start = time.time()
             img = cv2.imread(str(img_path), 1)
-            image_scale, img = read_scale(img, device="cpu")
-            predicted = predict(model, img, device=cfg.DEVICE)
+            image_scale, img = read_scale(img, device="cpu", visualize=True)
+            predicted = predict(model, img)
             results_df, lengths_points = calculate_mass(predicted, image_scale, img_path)
 
             img = predicted["image"]
@@ -243,12 +223,12 @@ def visualize(args):
                       f"Image total mass: {mass_total} ug\n"
                       f"{'-' * 50}")
                 print(F"Image processed: {str(img_path)}\n")
-
-                info_dict = {"scale": (f"Scale: {image_scale['um']} um", (50, 50)),
-                             "number": (f"Animal number: {predicted['bboxes'].shape[0]}", (50, 100)),
-                             "mass": (f"Total biomass: {round(mass_total, 5)} ug", (50, 150)),
-                             "mean": (f"Animal mass mean: {round(mass_mean, 5)} ug", (50, 200)),
-                             "std": (f"Animal mass std: {round(mass_std, 5)} ug", (50, 250))}
+                shift, dec = 50, 5  # shift the text from the border, round to 5 decimal places
+                info_dict = {"scale": (f"Scale: {image_scale['um']} um", (shift, shift)),
+                             "number": (f"Animal number: {predicted['bboxes'].shape[0]}", (shift, 100)),
+                             "mass": (f"Total biomass: {round(mass_total, dec)} ug", (shift, 150)),
+                             "mean": (f"Animal mass mean: {round(mass_mean, dec)} ug", (shift, 200)),
+                             "std": (f"Animal mass std: {round(mass_std, dec)} ug", (shift, 250))}
 
                 for text, position in info_dict.values():
                     img = cv2.putText(img, text, position,
@@ -268,7 +248,7 @@ def visualize(args):
             # cv2.imwrite(str(args.output_dir / f"{img_path.stem}_results.jpg"), img)
 
             cv2.imshow('predicted', cv2.resize(img, (1400, 700)))
-            cv2.waitKey(2500)
+            cv2.waitKey(1500)
 
         except Exception as e:
             print(e)

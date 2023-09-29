@@ -1,6 +1,6 @@
 __pycache__/
 .idea/
-src/images/
+venv
 src/gui/icons
 crops/
 *.jpg
@@ -11,5 +11,7 @@ crops/
 *.csv
 *.zip
 *.log
+src/images/test/
+src/keypoints_detector/runs/
 !images/keypoint_rcnn_detection.jpg
 !src/gui/icons.zip
