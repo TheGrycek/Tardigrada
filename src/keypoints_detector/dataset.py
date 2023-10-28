@@ -82,40 +82,41 @@ class KeypointsDataset(Dataset):
         kpts_instance = [i for i in range(int(keypoints.shape[0] / self.points_num)) for _ in range(self.points_num)]
 
         while True:
-            one_of = [alb.ImageCompression(p=1),
-                      alb.Blur(blur_limit=10, p=1),
-                      alb.GaussNoise(p=1),
-                      alb.CLAHE(p=1),
-                      alb.FancyPCA(alpha=0.1, p=1),
-                      alb.MultiplicativeNoise(multiplier=(0.9, 1.1), p=1)
-                      ]
+            one_of = [
+                alb.ImageCompression(p=1),
+                alb.Blur(blur_limit=10, p=1),
+                alb.GaussNoise(p=1),
+                alb.CLAHE(p=1),
+                alb.FancyPCA(alpha=0.1, p=1),
+                alb.MultiplicativeNoise(multiplier=(0.9, 1.1), p=1)
+            ]
             x_min, y_min, x_max, y_max = random_bbox_crop_roi(bboxes, img.shape)
             transforms = [
                 alb.Crop(x_min=x_min, y_min=y_min, x_max=x_max, y_max=y_max, p=0.5),
                 alb.SmallestMaxSize(max_size=800,
                                     interpolation=1),
-                *[alb.RandomRotate90(p=0.3) for _ in range(3)],
+                *[alb.RandomRotate90(p=0.25) for _ in range(3)],
                 alb.Affine(interpolation=3,
                            rotate_method="ellipse",
-                           p=0.9),
+                           p=0.7),
                 alb.RandomShadow(shadow_roi=(0, 0, 1, 1),
                                  num_shadows_lower=2,
                                  num_shadows_upper=5,
                                  shadow_dimension=5,
-                                 p=0.5),
+                                 p=0.3),
                 alb.RandomSunFlare(flare_roi=(0, 0, 1, 1),
                                    angle_lower=0,
                                    angle_upper=1,
                                    num_flare_circles_lower=2,
                                    num_flare_circles_upper=6,
                                    src_radius=200,
-                                   p=0.5),
+                                   p=0.3),
                 alb.ColorJitter(brightness=(0.5, 1.2),
                                 contrast=(0.2, 1.0),
                                 saturation=(0.2, 1.0),
                                 hue=(-0.5, 0.5),
-                                p=1),
-                *[alb.OneOf(one_of, p=0.5) for _ in range(3)]
+                                p=0.5),
+                *[alb.OneOf(one_of, p=0.3) for _ in range(3)]
             ]
 
             transform = alb.Compose(transforms,
@@ -154,15 +155,16 @@ def seed_worker(worker_id):
 def create_dataloaders(
         images_dir=cfg.IMAGES_PATH,
         annotation_file=cfg.ANNOTATION_FILE_PATH,
-        transform_train=True,
+        transform_train=cfg.TRANSFORM_TRAIN,
         transform_val=False,
         transform_test=False,
-        shuffle_train=True,
+        shuffle_train=cfg.SHUFFLE_TRAIN,
         shuffle_val=False,
         shuffle_test=False,
         val_ratio=cfg.VAL_RATIO,
         test_ratio=cfg.TEST_RATIO,
-        batch_size=cfg.BATCH_SIZE, tile=False
+        batch_size=cfg.BATCH_SIZE,
+        tile=False
 ):
 
     dataset = KeypointsDataset(images_dir=images_dir, annotation_file=annotation_file)
@@ -235,13 +237,17 @@ def get_normalization_params(images_dir=cfg.IMAGES_PATH, annotation_file=cfg.ANN
 
 
 def check_examples():
-    dataloader = create_dataloaders(images_dir=cfg.IMAGES_PATH, transform_train=True)["train"]
+    dataloader = create_dataloaders(transform_train=True)["train"]
 
-    for i, (img, annotation) in enumerate(dataloader):
+    for i, (img, annot) in enumerate(dataloader):
         img = tensor2rgb(img)
-        keypoints, bboxes = annotation[0]["keypoints"], annotation[0]["boxes"]
+        annotation = annot[0]
+        keypoints, bboxes, labels = annotation["keypoints"], annotation["boxes"], annotation["labels"]
+        print(labels)
+        print("-" * 50)
 
         for obj_keypoints, bbox in zip(keypoints, bboxes):
+            bbox = np.array(bbox, dtype=int)
             pt1, pt2 = tuple(bbox[:2]), tuple(bbox[2:])
             img = cv2.rectangle(img.copy(), pt1, pt2, (255, 0, 0), 2)
             for keypoint in obj_keypoints:
@@ -251,9 +257,9 @@ def check_examples():
         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
         # img = cv2.resize(img, None, fx=0.5, fy=0.5)
         cv2.imshow("img", img)
-        cv2.waitKey(1500)
+        cv2.waitKey(2000)
 
 
 if __name__ == '__main__':
-    get_normalization_params()
+    # get_normalization_params()
     check_examples()

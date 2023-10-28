@@ -1,6 +1,6 @@
 __pycache__/
 .idea/
-src/images/
+src/keypoints_detector/datasets/
 venv
 src/gui/icons
 crops/
@@ -13,5 +13,8 @@ crops/
 *.zip
 *.log
 src/keypoints_detector/runs/
+src/keypoints_detector/.ipynb_checkpoints
+src/gui/fugue-icons-3.5.6
 !images/keypoint_rcnn_detection.jpg
 !src/gui/icons.zip
+!*.dvc

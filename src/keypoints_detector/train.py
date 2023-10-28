@@ -158,7 +158,7 @@ def initialize_training_elements(args):
                                      annotation_file=args.annotation_directory,
                                      val_ratio=cfg.VAL_RATIO,
                                      test_ratio=cfg.TEST_RATIO,
-                                     transform_train=True)
+                                     transform_train=cfg.TRANSFORM_TRAIN)
     scheduler = lr_scheduler.MultiStepLR(optimizer,
                                          milestones=cfg.MILESTONES,
                                          gamma=cfg.GAMMA)

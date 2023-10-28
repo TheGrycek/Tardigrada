@@ -6,7 +6,6 @@ import keypoints_detector.config as cfg
 
 def predict(model, img):
     predicted = model(img)
-
     bboxes = predicted["boxes"].numpy()
     labels = predicted["labels"].numpy().astype(np.uint8)
     scores = predicted["scores"].numpy()
@@ -18,6 +17,7 @@ def predict(model, img):
         pt1 = tuple(bbox[:2].astype(np.uint16))
         pt2 = tuple(bbox[2:].astype(np.uint16))
         position = (int(bbox[0]), int(bbox[1]))
+        points = np.array(points, dtype=int)
 
         img = cv2.rectangle(img.copy(), pt1, pt2, (0, 0, 255), 2)
         img = cv2.putText(img, f"{cfg.INSTANCE_CATEGORY_NAMES[label]}{i}",

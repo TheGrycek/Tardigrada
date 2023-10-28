@@ -12,9 +12,11 @@ from PyQt5 import uic
 from PyQt5.QtCore import QEvent, Qt
 from PyQt5.QtCore import QThread, pyqtSignal
 from PyQt5.QtWidgets import QDialog
+from PyQt5.QtWidgets import QFileDialog, QTextEdit, QMainWindow
 from PyQt5.QtWidgets import QGraphicsScene, QGraphicsPixmapItem, QGraphicsItem, QGraphicsItemGroup, \
     QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsTextItem, QGraphicsWidget
-from PyQt5.QtWidgets import QPushButton, QFileDialog, QTextEdit, QMainWindow
+
+# from src.keypoints_detector.config import REPO_ROOT
 
 
 class MsgWorker(QThread):
@@ -68,7 +70,7 @@ class UI(QMainWindow):
     def __init__(self):
         super(UI, self).__init__()
         uic.loadUi("./gui/app_window.ui", self)
-        # self.setWindowIcon(QtGui.QIcon("./gui/icon.png"))
+        self.setWindowIcon(QtGui.QIcon("./gui/icons/bug--pencil.png"))
         # print(QFile.exists("./gui/icon.png"))
         self.initialize_scene()
         self.textbox = self.findChild(QTextEdit, "textEdit")
@@ -95,10 +97,12 @@ class UI(QMainWindow):
 
         self.point_size = 5
         self.connect_widgets()
-        self.category_names = OrderedDict({'eutardigrada black': 'eutar_bla',
-                                           'heterotardigrada echiniscus': 'heter_ech',
-                                           'eutardigrada translucent': 'eutar_tra',
-                                           'scale': 'scale'})
+        self.category_names = OrderedDict({
+            'eutardigrada black': 'eutar_bla',
+            'heterotardigrada echiniscus': 'heter_ech',
+            'eutardigrada translucent': 'eutar_tra',
+            'scale': 'scale'
+        })
 
     def initialize_scene(self):
         self.scene = QGraphicsScene()
@@ -258,7 +262,8 @@ class UI(QMainWindow):
             for item in sel_items:
                 tard_item = item.data(1)
                 if tard_item:
-                    [self.scene.removeItem(pt) for pt in tard_item.get_keypoints()]
+                    for pt in tard_item.get_keypoints():
+                        self.scene.removeItem(pt)
                     self.scene.removeItem(tard_item.get_rectangle())
                     self.scene.removeItem(tard_item.get_label())
                     self.scene.removeItem(tard_item)
@@ -280,24 +285,22 @@ class UI(QMainWindow):
         """
         mouse_x, mouse_y = self.get_mouse_pos(event)
         dx, dy = item.scenePos().x(), item.scenePos().y()
-        (x1m, y1m, wm, hm) = self.memory_rect_pts
-        cursor_x = mouse_x - dx
-        cursor_y = mouse_y - dy
-        top_left = (x1m, y1m)
-        w = abs(x1m - mouse_x)
-        h = abs(y1m - mouse_y)
+        x1m, y1m, wm, hm = self.memory_rect_pts
+        x, y = x1m, y1m
 
         # resize rectangle in every direction
-        if cursor_x > x1m and cursor_y < y1m:
-            top_left = (x1m, cursor_y)
-        elif cursor_x < x1m and cursor_y < y1m:
-            top_left = (cursor_x, cursor_y)
-        elif cursor_x < x1m and cursor_y > y1m:
-            top_left = (cursor_x, y1m)
+        if mouse_x > x1m and mouse_y < y1m:
+            x, y = x1m, mouse_y
+        elif mouse_x < x1m and mouse_y < y1m:
+            x, y = mouse_x, mouse_y
+        elif mouse_x < x1m and mouse_y > y1m:
+            x, y = mouse_x, y1m
 
-        item.setRect(*top_left, w, h)
-        self.update()
-        return *top_left, w, h
+        w = abs((x + dx) - mouse_x)
+        h = abs((y + dy) - mouse_y)
+
+        item.setRect(x, y, w, h)
+        return [x, y, w, h]
 
     def update_keypoints(self, keypoints, rect):
         """
@@ -308,7 +311,7 @@ class UI(QMainWindow):
         x, y, w, h = rect
         dx = x - self.memory_rect_pts[0]
         dy = y - self.memory_rect_pts[1]
-
+        # TODO: refactor code
         if w > h:
             l_xs_range = np.array([w * 0.05, w * 0.95])
             w_ys_range = np.array([(h * 0.2), (h * 0.8)])
@@ -349,8 +352,9 @@ class UI(QMainWindow):
         l_pts = np.concatenate((l_xs, l_ys), axis=1)
         w_pts = np.concatenate((w_xs, w_ys), axis=1)
 
-        new_positions = np.concatenate((l_pts, w_pts))
-        [kpt.setPos(*new_pos) for kpt, new_pos in zip(keypoints, new_positions)]
+        for kpt, new_pos in zip(keypoints, np.concatenate((l_pts, w_pts))):
+            kpt.setPos(*new_pos)
+
         self.update()
 
     def eventFilter(self, source, event):
@@ -364,15 +368,20 @@ class UI(QMainWindow):
         if event.type() == QEvent.MouseMove and self.follow_mouse_flag:
             item = self.check_for_item(QGraphicsRectItem)
             if item:
-                self.resize_rect(event, item)
+                x, y, w, h = self.resize_rect(event, item)
+                self.memory_rect_pts = [x, y, x + w, y + h]
+                self.update()
 
         # update rectangle position after creating new instance
         if event.type() == QEvent.MouseMove and self.create_instance_flag and self.follow_mouse_flag:
             if isinstance(self.memory_item, TardigradeItem):
                 rect = self.resize_rect(event, self.memory_item.get_rectangle())
+                self.update()
                 self.update_keypoints(self.memory_item.get_keypoints(), rect)
             elif isinstance(self.memory_item, QGraphicsRectItem):
-                self.resize_rect(event, self.memory_item)
+                x, y, w, h = self.resize_rect(event, self.memory_item)
+                self.memory_rect_pts = [x, y, x + w, y + h]
+                self.update()
 
         # update label text
         if event.type() == QEvent.MouseButtonDblClick and not self.follow_mouse_flag:
@@ -408,9 +417,12 @@ class UI(QMainWindow):
                 self.memory_rect_pts = self.get_position(item)
             self.update()
 
-        # set rectangle position
+        # set rectangle position after double click
         if event.type() == QEvent.MouseButtonPress and self.follow_mouse_flag and not self.create_instance_flag:
             self.follow_mouse_flag = False
+            item = self.check_for_item(QGraphicsRectItem)
+            if item:
+                self.memory_rect_pts = self.get_position(item)
             self.update()
 
         # resize scene view
@@ -593,7 +605,7 @@ class UI(QMainWindow):
         :param obj: QGraphicsRectItem/ QGraphicsItemGroup - object whose position is obtained
         :return: list with floating point object coordinates
         """
-        dx, dy = obj.scenePos().x(), obj.scenePos().y()
+        dx, dy = 0, 0
         if isinstance(obj, QGraphicsItemGroup):
             # shift position by the ellipse radius
             dx -= self.point_size / 2
