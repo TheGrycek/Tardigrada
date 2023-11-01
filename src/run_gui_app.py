@@ -22,12 +22,13 @@ class MainWindow(UI):
         run_inference(args_parsed, self.msg_queue, stop)
         self.stop_flag = True
         self.stop_proc_threads_flag = False
+        self.update_img(0)
 
     def calc_mass_worker(self, stop):
         """Runs in self.mass_calc_thread"""
         args = namedtuple("args", ["output_dir"])
         args_parsed = args(self._folder_path_out)
-        run_calc_mass(args_parsed, self.msg_queue, stop)
+        run_calc_mass(args_parsed, self.msg_queue, stop, self.spline_interpolation_algorithm)
         self.stop_flag = True
         self.stop_proc_threads_flag = False
 

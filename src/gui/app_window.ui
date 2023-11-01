@@ -49,7 +49,7 @@
           <item row="0" column="0">
            <layout class="QGridLayout" name="gridLayout_3">
             <item row="2" column="0">
-             <widget class="QComboBox" name="detectionAlgComboBox">
+             <widget class="QComboBox" name="detectionComboBox">
               <item>
                <property name="text">
                 <string>keypoint RCNN</string>
@@ -58,47 +58,37 @@
              </widget>
             </item>
             <item row="6" column="0">
-             <widget class="QComboBox" name="scaleAlgComboBox">
+             <widget class="QComboBox" name="scaleComboBox">
               <item>
                <property name="text">
                 <string>find-contours + heuristics</string>
                </property>
               </item>
-              <item>
-               <property name="text">
-                <string>find-conours + linear classifier</string>
-               </property>
-              </item>
              </widget>
             </item>
             <item row="4" column="0">
-             <widget class="QComboBox" name="lineAlgComboBox">
+             <widget class="QComboBox" name="interpolationComboBox">
               <item>
                <property name="text">
-                <string>B-spline</string>
+                <string>quadratic</string>
                </property>
               </item>
               <item>
                <property name="text">
-                <string>polynomial</string>
+                <string>cubic</string>
                </property>
               </item>
               <item>
                <property name="text">
-                <string>line</string>
-               </property>
-              </item>
-              <item>
-               <property name="text">
-                <string>curve</string>
+                <string>slinear</string>
                </property>
               </item>
              </widget>
             </item>
             <item row="3" column="0">
-             <widget class="QLabel" name="lineAlgLabel">
+             <widget class="QLabel" name="interpolationLabel">
               <property name="text">
-               <string>Line fitting algorithm</string>
+               <string>Line interpolation algorithm</string>
               </property>
               <property name="wordWrap">
                <bool>true</bool>
@@ -158,6 +148,13 @@
               <property name="icon">
                <iconset>
                 <normaloff>icons/minus-circle.png</normaloff>icons/minus-circle.png</iconset>
+              </property>
+             </widget>
+            </item>
+            <item row="6" column="2">
+             <widget class="QPushButton" name="clearButton">
+              <property name="text">
+               <string>Clear</string>
               </property>
              </widget>
             </item>

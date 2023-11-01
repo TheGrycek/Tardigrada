@@ -7,7 +7,7 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 REPO_ROOT = "/tarmass" if Path("/.dockerenv").is_file() else "/home/grycek/Desktop/repos/Tardigrada"
 ANNOTATION_FILE_PATH = f"/{REPO_ROOT}/src/keypoints_detector/datasets/train/dataset_537/TardigradaNew_537.json"
 IMAGES_PATH = f"/{REPO_ROOT}/src/keypoints_detector/datasets/train/dataset_537"
-MODEL_PATH = f"/{REPO_ROOT}/src/keypoints_detector/checkpoints/checkpoint_100.pth"
+MODEL_PATH = f"/{REPO_ROOT}/src/keypoints_detector/checkpoints/keypoints_detector_best.pth"
 
 KEYPOINTS = 7
 INSTANCE_CATEGORY_NAMES = ['__background__', 'eutar_bla', 'heter_ech', 'eutar_tra']

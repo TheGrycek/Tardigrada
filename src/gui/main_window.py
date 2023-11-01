@@ -16,8 +16,6 @@ from PyQt5.QtWidgets import QFileDialog, QTextEdit, QMainWindow
 from PyQt5.QtWidgets import QGraphicsScene, QGraphicsPixmapItem, QGraphicsItem, QGraphicsItemGroup, \
     QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsTextItem, QGraphicsWidget
 
-# from src.keypoints_detector.config import REPO_ROOT
-
 
 class MsgWorker(QThread):
     """Worker for sending messages to the message queue (presented in UI.textbox)"""
@@ -70,8 +68,6 @@ class UI(QMainWindow):
     def __init__(self):
         super(UI, self).__init__()
         uic.loadUi("./gui/app_window.ui", self)
-        self.setWindowIcon(QtGui.QIcon("./gui/icons/bug--pencil.png"))
-        # print(QFile.exists("./gui/icon.png"))
         self.initialize_scene()
         self.textbox = self.findChild(QTextEdit, "textEdit")
         self.cursor = self.textbox.textCursor()
@@ -90,19 +86,20 @@ class UI(QMainWindow):
         self.start_msg_thread()
         self.follow_mouse_flag = False
         self.create_instance_flag = False
-        self.setMouseTracking(True)
         self.tard_num = 0
         self.memory_item = None
         self.memory_rect_pts = None
-
+        self.spline_interpolation_algorithm = None
         self.point_size = 5
-        self.connect_widgets()
         self.category_names = OrderedDict({
             'eutardigrada black': 'eutar_bla',
             'heterotardigrada echiniscus': 'heter_ech',
             'eutardigrada translucent': 'eutar_tra',
             'scale': 'scale'
         })
+
+        self.connect_widgets()
+        self.set_variables()
 
     def initialize_scene(self):
         self.scene = QGraphicsScene()
@@ -120,11 +117,18 @@ class UI(QMainWindow):
         self.inferenceButton.pressed.connect(self.start_inference)
         self.stopButton.pressed.connect(self.stop_processing)
         self.calculateButton.pressed.connect(self.start_calc_mass)
+        self.clearButton.pressed.connect(self.clear_info)
+        self.interpolationComboBox.currentTextChanged.connect(self.curve_algorithm_change)
         # correction tool tab
         self.openImageButton.pressed.connect(self.open_image)
         self.nextButton.pressed.connect(self.next_image)
         self.previousButton.pressed.connect(self.previous_image)
         self.instanceButton.pressed.connect(self.create_instance)
+
+    def set_variables(self):
+        self.setWindowIcon(QtGui.QIcon("./gui/icons/bug--pencil.png"))
+        self.setMouseTracking(True)
+        self.spline_interpolation_algorithm = self.interpolationComboBox.currentText()
 
     def textbox_print_msg(self, msg):
         """Add message to the textbox of the application's 'Control' tab"""
@@ -153,21 +157,21 @@ class UI(QMainWindow):
         self.images_paths = []
         self.imagesListWidget.clear()
         path = "" if self._folder_path_in is None else self._folder_path_in
+        if path == "" and self._folder_path_out is not None:
+            path = self._folder_path_out
         self._folder_path_in = Path(QFileDialog.getExistingDirectory(self, "Choose input directory", str(path)))
         images_extensions = ("png", "tif", "jpg", "jpeg")
-        i = 0
         for ext in images_extensions:
             ext_paths = list(self._folder_path_in.glob(f"*.{ext}"))
             self.images_paths.extend(ext_paths)
             for pth in ext_paths:
                 self.imagesListWidget.addItem(str(pth))
-                self.current_image = i
-                self.set_scene(pth)
-                i += 1
 
     def select_folder_out(self):
         """Set output folder for the 'Inference' and 'Calculate statistics' processes"""
         path = "" if self._folder_path_out is None else self._folder_path_out
+        if path == "" and self._folder_path_in is not None:
+            path = self._folder_path_in
         self._folder_path_out = Path(QFileDialog.getExistingDirectory(self, "Choose output directory", str(path)))
 
     def check_folders(self):
@@ -212,6 +216,15 @@ class UI(QMainWindow):
                 self.mass_calc_thread.start()
                 self.stop_flag = False
                 self.msg_queue.put("Calculating biomass started.\n")
+
+    def clear_info(self):
+        self.textbox.clear()
+        self.cursor.movePosition(QtGui.QTextCursor.End)
+        self.textbox.setTextCursor(self.cursor)
+
+    def curve_algorithm_change(self, method):
+        """Connected to the 'Line fitting algorithm' combo box - changes spline interpolation algorithm"""
+        self.spline_interpolation_algorithm = method
 
     def stop_processing(self):
         """Sends flag to stop processing for inference and mass calc threads"""

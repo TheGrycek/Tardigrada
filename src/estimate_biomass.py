@@ -111,12 +111,6 @@ def run_inference(args, queue, stop, image_scale=None):
     model = KeypointDetector(tiling=True)
 
     for i, img_path in enumerate(images_paths, start=1):
-        if not Path(img_path).is_dir():
-            log_error_and_queue(queue, "Images directory does not exist!")
-
-        if len(list(Path(img_path).glob("*"))) == 0:
-            log_error_and_queue(queue, "Empty images directory!")
-
         if stop():
             queue.put("Processing stopped.\n")
             break
