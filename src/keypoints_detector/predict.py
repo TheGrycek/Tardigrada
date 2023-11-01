@@ -30,11 +30,6 @@ def predict(model, img):
         for pt_x, pt_y in points:
             img = cv2.circle(img, center=(round(pt_x), round(pt_y)), radius=4, color=(255, 0, 255), thickness=4)
 
-        for k in range(4):
-            img = cv2.line(img, tuple(points[k]), tuple(points[k + 1]), color=(0, 255, 255), thickness=2)
-
-        img = cv2.line(img, tuple(points[-2]), tuple(points[-1]), color=(0, 255, 255), thickness=2)
-
     output = {"image": img,
               "keypoints": grouped_keypoints,
               "bboxes": bboxes,

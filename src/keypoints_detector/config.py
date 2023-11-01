@@ -5,8 +5,8 @@ import torch
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 REPO_ROOT = "/tarmass" if Path("/.dockerenv").is_file() else "/home/grycek/Desktop/repos/Tardigrada"
-ANNOTATION_FILE_PATH = f"/{REPO_ROOT}/src/datasets/keypoints_detector/train/dataset_537/TardigradaNew_537.json"
-IMAGES_PATH = f"/{REPO_ROOT}/src/datasets/keypoints_detector/train/dataset_537"
+ANNOTATION_FILE_PATH = f"/{REPO_ROOT}/src/keypoints_detector/datasets/train/dataset_537/TardigradaNew_537.json"
+IMAGES_PATH = f"/{REPO_ROOT}/src/keypoints_detector/datasets/train/dataset_537"
 MODEL_PATH = f"/{REPO_ROOT}/src/keypoints_detector/checkpoints/checkpoint_100.pth"
 
 KEYPOINTS = 7
