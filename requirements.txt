@@ -25,3 +25,7 @@ dvc-gdrive==2.19.1
 
 ### gui
 pyqt5==5.14.1
+
+
+### executable
+cx-Freeze==6.15.10

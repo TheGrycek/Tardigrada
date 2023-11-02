@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 import warnings
 from argparse import ArgumentParser
 from pathlib import Path
@@ -8,6 +7,7 @@ from time import time, strftime, gmtime
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+import torch.nn.functional as F
 import torch.optim.lr_scheduler as lr_scheduler
 from torch.utils.tensorboard import SummaryWriter
 
@@ -16,7 +16,6 @@ from keypoints_detector.dataset import create_dataloaders
 from keypoints_detector.model import keypoint_detector
 from keypoints_detector.test import test
 from keypoints_detector.utils import set_reproducibility_params, create_losses_dict
-import torch.nn.functional as F
 
 set_reproducibility_params()
 writer = SummaryWriter("./runs/board_results")
