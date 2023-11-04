@@ -8,11 +8,11 @@ import torch
 from ray import tune
 
 import keypoints_detector.config as cfg
-from keypoints_detector.dataset import create_dataloaders
-from keypoints_detector.model import keypoint_detector, KeypointDetector
-from keypoints_detector.test import test
-from keypoints_detector.train import train_one_batch, validate
-from keypoints_detector.utils import set_reproducibility_params, create_losses_dict
+from keypoints_detector.kpt_rcnn.dataset import create_dataloaders
+from keypoints_detector.kpt_rcnn.model import keypoint_detector, KeypointDetector
+from keypoints_detector.kpt_rcnn.test import test
+from keypoints_detector.kpt_rcnn.train import train_one_batch, validate
+from keypoints_detector.kpt_rcnn.utils import set_reproducibility_params, create_losses_dict
 
 set_reproducibility_params()
 # os.environ["TUNE_DISABLE_STRICT_METRIC_CHECKING"] = "1"
@@ -58,7 +58,7 @@ def check_training_params(config):
 
 
 def check_inference_params(config):
-    model = KeypointDetector(model_path=cfg.MODEL_PATH, **config)
+    model = KeypointDetector(model_path=cfg.RCNN_MODEL_PATH, **config)
     dataloaders = create_dataloaders(images_dir=str(cfg.IMAGES_PATH),
                                      annotation_file=str(cfg.ANNOTATION_FILE_PATH),
                                      val_ratio=cfg.VAL_RATIO,
@@ -69,7 +69,7 @@ def check_inference_params(config):
 
 
 def search_hyperparameters(args):
-    results_path = Path("/tarmass/src/keypoints_detector/hyperparam_results")
+    results_path = Path(f"{cfg.REPO_ROOT}/src/keypoints_detector/kpt_rcnn")
     results_path.mkdir(exist_ok=True)
 
     if args.search_mode == "training":

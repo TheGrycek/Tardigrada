@@ -12,7 +12,8 @@ crops/
 *.csv
 *.zip
 *.log
-src/keypoints_detector/runs/
+src/keypoints_detector/kpt_rcnn/runs/
+src/keypoints_detector/yolo/runs
 src/build_options
 **/.ipynb_checkpoints/
 src/gui/fugue-icons-3.5.6

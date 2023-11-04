@@ -90,6 +90,7 @@ class UI(QMainWindow):
         self.memory_item = None
         self.memory_rect_pts = None
         self.spline_interpolation_algorithm = None
+        self.inference_model_name = None
         self.point_size = 5
         self.category_names = OrderedDict({
             'eutardigrada black': 'eutar_bla',
@@ -97,6 +98,10 @@ class UI(QMainWindow):
             'eutardigrada translucent': 'eutar_tra',
             'scale': 'scale'
         })
+        self.models_names = {
+            'YOLOv8m pose': 'yolov8',
+            'keypoint RCNN': 'kpt_rcnn'
+        }
 
         self.connect_widgets()
         self.set_variables()
@@ -119,16 +124,19 @@ class UI(QMainWindow):
         self.calculateButton.pressed.connect(self.start_calc_mass)
         self.clearButton.pressed.connect(self.clear_info)
         self.interpolationComboBox.currentTextChanged.connect(self.curve_algorithm_change)
+        self.detectionComboBox.currentTextChanged.connect(self.detection_algorithm_change)
         # correction tool tab
         self.openImageButton.pressed.connect(self.open_image)
         self.nextButton.pressed.connect(self.next_image)
         self.previousButton.pressed.connect(self.previous_image)
         self.instanceButton.pressed.connect(self.create_instance)
+        self.scaleSpinBox.valueChanged.connect(self.scale_value_change)
 
     def set_variables(self):
         self.setWindowIcon(QtGui.QIcon("./gui/icons/bug--pencil.png"))
         self.setMouseTracking(True)
         self.spline_interpolation_algorithm = self.interpolationComboBox.currentText()
+        self.detection_algorithm_change(self.detectionComboBox.currentText())
 
     def textbox_print_msg(self, msg):
         """Add message to the textbox of the application's 'Control' tab"""
@@ -151,6 +159,7 @@ class UI(QMainWindow):
         self.create_img_objects(img_path)
         self.pixmap.setPixmap(QtGui.QPixmap(str(img_path)))
         self.graphicsView.setScene(self.scene)
+        self.scaleSpinBox.setValue(self.image_data["scale_value"])
 
     def select_folder_in(self):
         """Add images paths to the list and the application widget, show selected image"""
@@ -225,6 +234,9 @@ class UI(QMainWindow):
     def curve_algorithm_change(self, method):
         """Connected to the 'Line fitting algorithm' combo box - changes spline interpolation algorithm"""
         self.spline_interpolation_algorithm = method
+
+    def detection_algorithm_change(self, method):
+        self.inference_model_name = self.models_names[method]
 
     def stop_processing(self):
         """Sends flag to stop processing for inference and mass calc threads"""
@@ -380,7 +392,7 @@ class UI(QMainWindow):
         # update rectangle position after double click
         if event.type() == QEvent.MouseMove and self.follow_mouse_flag:
             item = self.check_for_item(QGraphicsRectItem)
-            if item:
+            if item and self.memory_rect_pts:
                 x, y, w, h = self.resize_rect(event, item)
                 self.memory_rect_pts = [x, y, x + w, y + h]
                 self.update()
@@ -475,7 +487,6 @@ class UI(QMainWindow):
         self.memory_item = tard_item
         return rect_item
 
-    # TODO: Make it possible to change the scale value
     def create_scale(self, bbox):
         """
         Create scale bbox and label items
@@ -486,6 +497,12 @@ class UI(QMainWindow):
         rect_item, _ = self.add_rect(bbox, "scale", data=self.image_data["scale_value"], colour=colour)
         self.memory_item = rect_item
         return rect_item
+
+    def scale_value_change(self, value):
+        for item in self.scene.items():
+            if item.data(0) is not None and item.data(0)["label"] == "scale":
+                item.data(0)["value"] = value
+                self.image_data["scale_value"] = value
 
     def create_object_instance(self, class_name, event):
         """

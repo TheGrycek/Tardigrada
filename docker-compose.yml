@@ -2,6 +2,7 @@ version: "3"
 
 services:
   processing-tardigrade:
+    container_name: tarmass
     image: tardigrada:latest
     build: .
     volumes:

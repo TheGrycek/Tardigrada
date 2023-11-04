@@ -10,7 +10,7 @@ from pycocotools.coco import COCO
 from torch.utils.data import Dataset, DataLoader
 
 import keypoints_detector.config as cfg
-from keypoints_detector.utils import tensor2rgb, random_bbox_crop_roi
+from keypoints_detector.kpt_rcnn.utils import tensor2rgb, random_bbox_crop_roi
 
 seed = 123
 random.seed(123)

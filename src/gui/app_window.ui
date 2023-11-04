@@ -30,13 +30,13 @@
    <layout class="QGridLayout" name="gridLayout_2">
     <item row="0" column="1">
      <layout class="QGridLayout" name="gridLayout">
-      <item row="1" column="0">
+      <item row="0" column="0">
        <widget class="QTabWidget" name="tabWidget">
         <property name="tabShape">
          <enum>QTabWidget::Rounded</enum>
         </property>
         <property name="currentIndex">
-         <number>0</number>
+         <number>1</number>
         </property>
         <property name="movable">
          <bool>true</bool>
@@ -50,6 +50,11 @@
            <layout class="QGridLayout" name="gridLayout_3">
             <item row="2" column="0">
              <widget class="QComboBox" name="detectionComboBox">
+              <item>
+               <property name="text">
+                <string>YOLOv8m pose</string>
+               </property>
+              </item>
               <item>
                <property name="text">
                 <string>keypoint RCNN</string>
@@ -177,29 +182,6 @@
           <string>Correction tool</string>
          </attribute>
          <layout class="QGridLayout" name="gridLayout_5">
-          <item row="3" column="2">
-           <widget class="QListWidget" name="imagesListWidget">
-            <property name="enabled">
-             <bool>true</bool>
-            </property>
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Fixed" vsizetype="Expanding">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="0" colspan="2">
-           <widget class="QGraphicsView" name="graphicsView"/>
-          </item>
-          <item row="2" column="2">
-           <widget class="QLabel" name="label_4">
-            <property name="text">
-             <string>File list</string>
-            </property>
-           </widget>
-          </item>
           <item row="0" column="0">
            <widget class="QPushButton" name="previousButton">
             <property name="text">
@@ -208,17 +190,6 @@
             <property name="icon">
              <iconset>
               <normaloff>icons/arrow-180.png</normaloff>icons/arrow-180.png</iconset>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="1">
-           <widget class="QPushButton" name="nextButton">
-            <property name="text">
-             <string>Next</string>
-            </property>
-            <property name="icon">
-             <iconset>
-              <normaloff>icons/arrow.png</normaloff>icons/arrow.png</iconset>
             </property>
            </widget>
           </item>
@@ -233,7 +204,55 @@
             </property>
            </widget>
           </item>
-          <item row="1" column="0">
+          <item row="2" column="1">
+           <widget class="QLabel" name="label">
+            <property name="text">
+             <string>Scale value [ µm ]</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="0" colspan="2">
+           <widget class="QGraphicsView" name="graphicsView"/>
+          </item>
+          <item row="0" column="1">
+           <widget class="QPushButton" name="nextButton">
+            <property name="text">
+             <string>Next</string>
+            </property>
+            <property name="icon">
+             <iconset>
+              <normaloff>icons/arrow.png</normaloff>icons/arrow.png</iconset>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="2">
+           <widget class="QLabel" name="label_4">
+            <property name="text">
+             <string>File list</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="2">
+           <widget class="QListWidget" name="imagesListWidget">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Fixed" vsizetype="Expanding">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="1">
+           <widget class="QSpinBox" name="scaleSpinBox">
+            <property name="maximum">
+             <number>999999999</number>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="0">
            <widget class="QPushButton" name="instanceButton">
             <property name="text">
              <string>Create instance</string>

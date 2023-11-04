@@ -19,10 +19,9 @@ class MainWindow(UI):
         """Runs in self.inference_thread"""
         args = namedtuple("args", ["input_dir", "output_dir"])
         args_parsed = args(self._folder_path_in, self._folder_path_out)
-        run_inference(args_parsed, self.msg_queue, stop)
+        run_inference(args_parsed, self.msg_queue, stop, self.inference_model_name)
         self.stop_flag = True
         self.stop_proc_threads_flag = False
-        self.update_img(0)
 
     def calc_mass_worker(self, stop):
         """Runs in self.mass_calc_thread"""

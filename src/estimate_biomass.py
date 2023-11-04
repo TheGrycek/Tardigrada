@@ -3,6 +3,7 @@ import argparse
 import logging
 import time
 import traceback
+from functools import partial
 from pathlib import Path
 
 import cv2
@@ -10,11 +11,13 @@ import numpy as np
 import pandas as pd
 import ujson
 from scipy.interpolate import interp1d
+from ultralytics import YOLO
 
 import keypoints_detector.config as cfg
-from keypoints_detector.model import KeypointDetector
-from keypoints_detector.predict import predict
-from keypoints_detector.utils import calc_dimensions
+from keypoints_detector.kpt_rcnn.model import KeypointDetector
+from keypoints_detector.kpt_rcnn.predict import predict as predict_kpt_rcnn
+from keypoints_detector.kpt_rcnn.utils import calc_dimensions
+from keypoints_detector.yolo.predict import predict as predict_yolov8
 from scale_detector.scale_detector import read_scale
 
 
@@ -106,9 +109,22 @@ def log_error_and_queue(queue, info):
     queue.put(str(info) + "\n")
 
 
-def run_inference(args, queue, stop, image_scale=None):
+def run_inference(args, queue, stop, model_name="kpt_rcnn", image_scale=None):
     images_paths = prepare_paths(args)
-    model = KeypointDetector(tiling=True)
+
+    inference_params = {
+        "kpt_rcnn": {
+            "model": partial(KeypointDetector, tiling=True),
+            "function": predict_kpt_rcnn
+        },
+
+        "yolov8": {
+            "model": partial(YOLO, cfg.YOLO_MODEL_PATH),
+            "function": predict_yolov8
+        }
+    }
+
+    model = inference_params[model_name]["model"]()
 
     for i, img_path in enumerate(images_paths, start=1):
         if stop():
@@ -121,7 +137,8 @@ def run_inference(args, queue, stop, image_scale=None):
             if image_scale is None:
                 image_scale, _ = read_scale(img, device="cpu")
 
-            predicted = predict(model, img)
+            predicted = inference_params[model_name]["function"](model, img)
+
             out_dict = {
                 "path": str(img_path),
                 "scale_bbox": image_scale["bbox"],
@@ -190,7 +207,7 @@ def visualize(args):
             start = time.time()
             img = cv2.imread(str(img_path), 1)
             image_scale, img = read_scale(img, device="cpu", visualize=True)
-            predicted = predict(model, img)
+            predicted = predict_kpt_rcnn(model, img)
             results_df, lengths_points = calculate_mass(predicted, image_scale, img_path)
 
             img = predicted["image"]

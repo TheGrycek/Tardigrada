@@ -51,14 +51,12 @@ def keypoint_detector(num_classes=cfg.CLASSES_NUMBER,
                       box_nms_thresh=cfg.BOX_NMS_THRESH,
                       rpn_score_thresh=cfg.RPN_SCORE_THRESH,
                       box_score_thresh=cfg.BOX_SCORE_THRESH,
-                      box_detections_per_img=cfg.DETECTIONS_PER_IMG):
+                      box_detections_per_img=cfg.DETECTIONS_PER_IMG,
+                      dataset_mean=cfg.DATASET_MEAN,
+                      dataset_std=cfg.DATASET_STD):
 
     anchor_generator = rpn.AnchorGenerator(sizes=(32, 64, 128, 256, 512),
                                            aspect_ratios=(0.5, 1.0, 2.0))
-
-    # used for keypoints_detector_old3.pth
-    # anchor_generator = rpn.AnchorGenerator(sizes=(32, 64, 128, 256, 512),
-    #                                        aspect_ratios=(0.25, 0.5, 0.75, 1.0, 2.0, 3.0, 4.0))
 
     weights, backbone_nn = ResNet50_Weights, resnet50
     weights_backbone = weights.verify(weights.IMAGENET1K_V2)
@@ -79,9 +77,8 @@ def keypoint_detector(num_classes=cfg.CLASSES_NUMBER,
                          box_score_thresh=box_score_thresh,
                          rpn_anchor_generator=anchor_generator,
                          box_detections_per_img=box_detections_per_img,
-                         image_mean=[0.5991888642311096, 0.6207686066627502, 0.6249600052833557],
-                         image_std=[0.1923711895942688, 0.19484581053256989, 0.2025023251771927]
-                         )
+                         image_mean=dataset_mean,
+                         image_std=dataset_std)
 
     return model
 
@@ -89,7 +86,7 @@ def keypoint_detector(num_classes=cfg.CLASSES_NUMBER,
 class KeypointDetector:
     def __init__(
             self,
-            model_path=cfg.MODEL_PATH,
+            model_path=cfg.RCNN_MODEL_PATH,
             rpn_score_thresh=cfg.RPN_SCORE_THRESH,
             box_score_thresh=cfg.BOX_SCORE_THRESH,
             box_nms_thresh=cfg.BOX_NMS_THRESH,
