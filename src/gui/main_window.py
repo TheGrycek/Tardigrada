@@ -250,10 +250,14 @@ class UI(QMainWindow):
         """Connected to the 'Open selected image' button in 'Correction tool' tab -
         opends image selected in images list widget"""
         if len(self.images_paths) > 0:
-            img_path = self.imagesListWidget.currentItem().text()
-            img_num = self.imagesListWidget.currentRow()
-            self.current_image = img_num
-            self.set_scene(Path(img_path))
+            img_path = self.imagesListWidget.currentItem()
+            if img_path is not None:
+                img_num = self.imagesListWidget.currentRow()
+                self.current_image = img_num
+                self.set_scene(Path(img_path.text()))
+            else:
+                msg = "Image not selected.\n"
+                self.msg_queue.put(msg)
 
     def update_img(self, i):
         self.current_image += i
@@ -309,22 +313,25 @@ class UI(QMainWindow):
         :return: tuple - (x, y, w, h) rectangle coordinates
         """
         mouse_x, mouse_y = self.get_mouse_pos(event)
-        dx, dy = item.scenePos().x(), item.scenePos().y()
-        x1m, y1m, wm, hm = self.memory_rect_pts
-        x, y = x1m, y1m
+        x1, y1, x2, y2 = self.memory_rect_pts
+
+        pos_delta = item.pos()
+        dx, dy = pos_delta.x(), pos_delta.y()
+
+        x, y = x1, y1
+        w = abs(x - (mouse_x - dx))
+        h = abs(y - (mouse_y - dy))
 
         # resize rectangle in every direction
-        if mouse_x > x1m and mouse_y < y1m:
-            x, y = x1m, mouse_y
-        elif mouse_x < x1m and mouse_y < y1m:
+        if mouse_x > x1 and mouse_y < y1:
+            x, y = x1, mouse_y
+        elif mouse_x < x1 and mouse_y < y1:
             x, y = mouse_x, mouse_y
-        elif mouse_x < x1m and mouse_y > y1m:
-            x, y = mouse_x, y1m
-
-        w = abs((x + dx) - mouse_x)
-        h = abs((y + dy) - mouse_y)
+        elif mouse_x < x1 and mouse_y > y1:
+            x, y = mouse_x, y1
 
         item.setRect(x, y, w, h)
+        self.update()
         return [x, y, w, h]
 
     def update_keypoints(self, keypoints, rect):
@@ -389,6 +396,7 @@ class UI(QMainWindow):
         :param event: QEvent
         :return: bool
         """
+
         # update rectangle position after double click
         if event.type() == QEvent.MouseMove and self.follow_mouse_flag:
             item = self.check_for_item(QGraphicsRectItem)
@@ -430,7 +438,7 @@ class UI(QMainWindow):
                 # set new instance rectangle first point position
                 class_name = self.category_names[self.window.comboBox.currentText()]
                 rect_item = self.create_object_instance(class_name, event)
-                self.memory_rect_pts = self.get_position(rect_item)
+                self.memory_rect_pts = rect_item.rect().getCoords()
                 self.follow_mouse_flag = True
             self.update()
 
@@ -439,16 +447,16 @@ class UI(QMainWindow):
             self.follow_mouse_flag = True
             item = self.check_for_item(QGraphicsRectItem)
             if item:
-                self.memory_rect_pts = self.get_position(item)
-            self.update()
+                self.memory_rect_pts = item.rect().getCoords()
+                self.update()
 
         # set rectangle position after double click
         if event.type() == QEvent.MouseButtonPress and self.follow_mouse_flag and not self.create_instance_flag:
             self.follow_mouse_flag = False
             item = self.check_for_item(QGraphicsRectItem)
             if item:
-                self.memory_rect_pts = self.get_position(item)
-            self.update()
+                self.memory_rect_pts = item.rect().getCoords()
+                self.update()
 
         # resize scene view
         if event.type() == QEvent.Wheel and source == self.graphicsView.viewport() and \
@@ -502,6 +510,7 @@ class UI(QMainWindow):
         for item in self.scene.items():
             if item.data(0) is not None and item.data(0)["label"] == "scale":
                 item.data(0)["value"] = value
+                item.setData(0, {"label": "scale", "value": value})
                 self.image_data["scale_value"] = value
 
     def create_object_instance(self, class_name, event):
@@ -533,12 +542,12 @@ class UI(QMainWindow):
             if isinstance(item, TardigradeItem):
                 annotations.append({
                     "label": category_list.index(item.get_label().toPlainText()) + 1,
-                    "bbox": self.get_position(item.get_rectangle()),
-                    "keypoints": [self.get_position(pt)[:2] for pt in item.get_keypoints()]})
+                    "bbox": self.get_shifted_position(item.get_rectangle()),
+                    "keypoints": [self.get_shifted_position(pt)[:2] for pt in item.get_keypoints()]})
 
             elif item.data(0) is not None and item.data(0)["label"] == "scale":
                 img_data["scale_value"] = item.data(0)["value"]
-                img_data["scale_bbox"] = self.get_position(item)
+                img_data["scale_bbox"] = self.get_shifted_position(item)
 
         img_data["annotations"] = annotations
         ujson.dump(img_data, data_path.open("w"))
@@ -629,16 +638,25 @@ class UI(QMainWindow):
                 self.create_tardigrade(category_list[annot["label"] - 1], annot["bbox"], annot["keypoints"], i)
                 self.tard_num += 1
 
-    def get_position(self, obj):
+    def get_shifted_position(self, obj):
         """
         Get passed item position relative to the scene
         :param obj: QGraphicsRectItem/ QGraphicsItemGroup - object whose position is obtained
         :return: list with floating point object coordinates
         """
         dx, dy = 0, 0
-        if isinstance(obj, QGraphicsItemGroup):
-            # shift position by the ellipse radius
+        x1, y1, x2, y2 = 0, 0, 0, 0
+
+        if isinstance(obj, QGraphicsRectItem):
+            x1, y1, x2, y2 = obj.rect().getCoords()
+            pos_d = obj.pos()
+            dx, dy = pos_d.x(), pos_d.y()
+
+        elif isinstance(obj, QGraphicsItemGroup):
+            x1, y1, x2, y2 = obj.shape().controlPointRect().getCoords()
+            pos_d = obj.pos()
+            dx, dy = pos_d.x(), pos_d.y()
             dx -= self.point_size / 2
             dy -= self.point_size / 2
-        x1, y1, x2, y2 = obj.shape().controlPointRect().getCoords()
+
         return [x1 + dx, y1 + dy, x2 + dx, y2 + dy]
