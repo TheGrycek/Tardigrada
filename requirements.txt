@@ -12,6 +12,7 @@ scipy==1.10.0
 ujson==4.2.0
 ultralytics==8.0.203
 easyocr==1.4.1
+fpdf2==2.7.6
 
 ### training
 git+https://github.com/albumentations-team/albumentations.git
@@ -25,7 +26,6 @@ dvc-gdrive==2.19.1
 
 ### gui
 pyqt5==5.14.1
-
 
 ### executable
 cx-Freeze==6.15.10

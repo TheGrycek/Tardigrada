@@ -31,19 +31,19 @@ def parse_args():
     return parser.parse_args()
 
 
-def fit_spline(bbox, points, keypoints_num, method="quadratic", num_pts_inter=30):
+def fit_spline(bbox, points, keypoints_num, queue, method="quadratic", num_pts_inter=30):
     try:
         length_pts = points[: keypoints_num - 2]
         distance = np.cumsum(np.sqrt(np.sum(np.diff(length_pts, axis=0) ** 2, axis=1)))
         distance = np.insert(distance, 0, 0) / distance[-1]
         interpolator = interp1d(distance, length_pts, kind=method, axis=0)
         pts = interpolator(np.linspace(0, 1, num_pts_inter))
-
     except:
-        print("\nBspline error! No points correction added!")
-        print(traceback.format_exc())
-        pts = np.reshape(np.array(bbox), ((bbox.size // 2), 2))
-        return pts
+        error = "\nBspline error! No points correction added!\n" + traceback.format_exc()
+        logging.error(error)
+        queue.put(error)
+        box = np.array(bbox)
+        pts = np.reshape(box, ((box.size // 2), 2))
 
     return pts
 
@@ -58,13 +58,13 @@ def calculate_mass(predicted, scale, img_path, curve_fit_algorithm="quadratic", 
             queue.put(str(error) + "\n")
         return pd.DataFrame(columns=["img_path", "id", "class", "length", "width", "biomass"]), []
 
-    scale_ratio = scale["um"] / scale["bbox"][2]
+    scale_ratio = scale["um"] / abs(scale["bbox"][0] - scale["bbox"][2])
     density = 1.04
     results = []
     lengths_points = []
 
     for i, (bbox, points) in enumerate(zip(predicted["bboxes"], predicted["keypoints"])):
-        length_pts = fit_spline(bbox, points, cfg.KEYPOINTS, method=curve_fit_algorithm)
+        length_pts = fit_spline(bbox, points, cfg.KEYPOINTS, queue, method=curve_fit_algorithm)
         lengths_points.append(length_pts)
         length, width = calc_dimensions(length_pts, points[-2:], scale_ratio)
         class_name = cfg.INSTANCE_CATEGORY_NAMES[predicted["labels"][i]]
@@ -79,12 +79,13 @@ def calculate_mass(predicted, scale, img_path, curve_fit_algorithm="quadratic", 
                 mass = length * np.pi * (length / (2 * R)) ** 2 * density * 10 ** -6  # [ug]
 
             info = {
-                "img_path": img_path,
                 "id": i,
+                "img_path": img_path,
                 "class": class_name,
                 "length": length,
                 "width": width,
-                "biomass": mass
+                "biomass": mass,
+                "fitted_points": length_pts.tolist()
             }
 
             results.append(info)
@@ -168,6 +169,7 @@ def run_inference(args, queue, stop, model_name="kpt_rcnn", image_scale=None):
 
 def run_calc_mass(args, queue, stop, curve_fit_algorithm="quadratic"):
     json_paths = list(args.output_dir.glob(f"*.json"))
+    df = pd.DataFrame()
 
     for i, json_path in enumerate(json_paths, start=1):
         if stop():
@@ -190,9 +192,10 @@ def run_calc_mass(args, queue, stop, curve_fit_algorithm="quadratic"):
         predicted["keypoints"] = np.round(predicted["keypoints"], 0)
         results_df, lengths_points = calculate_mass(predicted, image_scale, str(img_path),
                                                     curve_fit_algorithm, queue)
-        results_df.to_csv(args.output_dir / f"{img_path.stem}_results.csv")
-
+        df = pd.concat([df, results_df])
         queue.put(f"[{i}/{len(json_paths)}] Mass calculated: {str(img_path)}\n")
+
+    df.to_csv(args.output_dir / "results.csv", index=False)
 
     if not stop():
         queue.put(f"Mass calculation finished.\n")

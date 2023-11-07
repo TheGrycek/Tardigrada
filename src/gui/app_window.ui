@@ -145,7 +145,25 @@
               </property>
              </widget>
             </item>
+            <item row="6" column="2">
+             <widget class="QPushButton" name="clearButton">
+              <property name="text">
+               <string>Clear</string>
+              </property>
+             </widget>
+            </item>
             <item row="0" column="2">
+             <widget class="QPushButton" name="reportButton">
+              <property name="text">
+               <string>Generate report</string>
+              </property>
+              <property name="icon">
+               <iconset>
+                <normaloff>icons/report.png</normaloff>icons/report.png</iconset>
+              </property>
+             </widget>
+            </item>
+            <item row="4" column="2">
              <widget class="QPushButton" name="stopButton">
               <property name="text">
                <string>Stop process</string>
@@ -153,13 +171,6 @@
               <property name="icon">
                <iconset>
                 <normaloff>icons/minus-circle.png</normaloff>icons/minus-circle.png</iconset>
-              </property>
-             </widget>
-            </item>
-            <item row="6" column="2">
-             <widget class="QPushButton" name="clearButton">
-              <property name="text">
-               <string>Clear</string>
               </property>
              </widget>
             </item>

@@ -79,6 +79,7 @@ class UI(QMainWindow):
         self.image_data = defaultdict(lambda: None)
         self.inference_thread = None
         self.mass_calc_thread = None
+        self.report_thread = None
         self.correction_tool_thread = None
         self.current_image = 0
         self.images_paths = []
@@ -122,6 +123,7 @@ class UI(QMainWindow):
         self.inferenceButton.pressed.connect(self.start_inference)
         self.stopButton.pressed.connect(self.stop_processing)
         self.calculateButton.pressed.connect(self.start_calc_mass)
+        self.reportButton.pressed.connect(self.start_report)
         self.clearButton.pressed.connect(self.clear_info)
         self.interpolationComboBox.currentTextChanged.connect(self.curve_algorithm_change)
         self.detectionComboBox.currentTextChanged.connect(self.detection_algorithm_change)
@@ -133,7 +135,7 @@ class UI(QMainWindow):
         self.scaleSpinBox.valueChanged.connect(self.scale_value_change)
 
     def set_variables(self):
-        self.setWindowIcon(QtGui.QIcon("./gui/icons/bug--pencil.png"))
+        self.setWindowIcon(QtGui.QIcon("./gui/icons/tarmass_icon.png"))
         self.setMouseTracking(True)
         self.spline_interpolation_algorithm = self.interpolationComboBox.currentText()
         self.detection_algorithm_change(self.detectionComboBox.currentText())
@@ -159,7 +161,9 @@ class UI(QMainWindow):
         self.create_img_objects(img_path)
         self.pixmap.setPixmap(QtGui.QPixmap(str(img_path)))
         self.graphicsView.setScene(self.scene)
-        self.scaleSpinBox.setValue(self.image_data["scale_value"])
+        scale_val = self.image_data["scale_value"]
+        if scale_val is not None:
+            self.scaleSpinBox.setValue(scale_val)
 
     def select_folder_in(self):
         """Add images paths to the list and the application widget, show selected image"""
@@ -206,6 +210,10 @@ class UI(QMainWindow):
         """Override this method - calculate tardigrades masses based on inference output"""
         pass
 
+    def report_worker(self, stop):
+        """Override this method - generate final report"""
+        pass
+
     def start_inference(self):
         """Connected to the 'Inference' button - runs inference thread"""
         if self.stop_flag:
@@ -225,6 +233,16 @@ class UI(QMainWindow):
                 self.mass_calc_thread.start()
                 self.stop_flag = False
                 self.msg_queue.put("Calculating biomass started.\n")
+
+    def start_report(self):
+        """Connected to the 'Generate report' button - runs report thread"""
+        if self.stop_flag:
+            if self.check_folders():
+                self.report_thread = Thread(target=self.report_worker, daemon=True,
+                                            args=(lambda: self.stop_proc_threads_flag,))
+                self.report_thread.start()
+                self.stop_flag = False
+                self.msg_queue.put("Report generation started.\n")
 
     def clear_info(self):
         self.textbox.clear()
