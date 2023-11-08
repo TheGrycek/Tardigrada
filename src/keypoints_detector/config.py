@@ -1,14 +1,14 @@
-import os
+from pathlib import Path
 
 import torch
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-# REPO_ROOT = os.environ["REPO_ROOT"] if "REPO_ROOT" in os.environ else "tarmass"
-REPO_ROOT = "/home/grycek/Desktop/repos/Tardigrada"
-ANNOTATION_FILE_PATH = f"/{REPO_ROOT}/src/images/train/dataset_291/TardigradaNew_291.json"
-IMAGES_PATH = f"/{REPO_ROOT}/src/images/train/dataset_291"
-MODEL_PATH = f"/{REPO_ROOT}/src/keypoints_detector/checkpoints/keypoints_detector_best.pth"
+REPO_ROOT = "/tarmass" if Path("/.dockerenv").is_file() else "/home/grycek/Desktop/repos/Tardigrada"
+ANNOTATION_FILE_PATH = f"/{REPO_ROOT}/src/keypoints_detector/datasets/train/dataset_537/TardigradaNew_537.json"
+IMAGES_PATH = f"/{REPO_ROOT}/src/keypoints_detector/datasets/train/dataset_537/images"
+RCNN_MODEL_PATH = f"/{REPO_ROOT}/src/keypoints_detector/kpt_rcnn/checkpoints/keypoints_detector_best.pth"
+YOLO_MODEL_PATH = f"/{REPO_ROOT}/src/keypoints_detector/yolo/runs/pose/train/weights/best.pt"
 
 KEYPOINTS = 7
 INSTANCE_CATEGORY_NAMES = ['__background__', 'eutar_bla', 'heter_ech', 'eutar_tra']
@@ -39,6 +39,11 @@ BATCH_SIZE = 1
 TEST_RATIO = 0.1
 VAL_RATIO = 0.1
 NUM_WORKERS = 10
+TRANSFORM_TRAIN = True
+SHUFFLE_TRAIN = True
+# DATASET
+DATASET_MEAN = [0.5991888642311096, 0.6207686066627502, 0.6249600052833557]
+DATASET_STD = [0.1923711895942688, 0.19484581053256989, 0.2025023251771927]
 # FREEZE
 FREEZE_EPOCHS = []  # after these epochs selected layers will be frozen
 UNFREEZE_EPOCHS = []  # after these epochs selected layers will be unfrozen

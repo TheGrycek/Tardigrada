@@ -51,14 +51,12 @@ def keypoint_detector(num_classes=cfg.CLASSES_NUMBER,
                       box_nms_thresh=cfg.BOX_NMS_THRESH,
                       rpn_score_thresh=cfg.RPN_SCORE_THRESH,
                       box_score_thresh=cfg.BOX_SCORE_THRESH,
-                      box_detections_per_img=cfg.DETECTIONS_PER_IMG):
+                      box_detections_per_img=cfg.DETECTIONS_PER_IMG,
+                      dataset_mean=cfg.DATASET_MEAN,
+                      dataset_std=cfg.DATASET_STD):
 
-    anchor_generator = rpn.AnchorGenerator(sizes=(16, 32, 64, 128, 256),
-                                           aspect_ratios=(0.2, 0.6, 1.0, 3))
-
-    # used for keypoints_detector_old3.pth
-    # anchor_generator = rpn.AnchorGenerator(sizes=(32, 64, 128, 256, 512),
-    #                                        aspect_ratios=(0.25, 0.5, 0.75, 1.0, 2.0, 3.0, 4.0))
+    anchor_generator = rpn.AnchorGenerator(sizes=(32, 64, 128, 256, 512),
+                                           aspect_ratios=(0.5, 1.0, 2.0))
 
     weights, backbone_nn = ResNet50_Weights, resnet50
     weights_backbone = weights.verify(weights.IMAGENET1K_V2)
@@ -79,9 +77,8 @@ def keypoint_detector(num_classes=cfg.CLASSES_NUMBER,
                          box_score_thresh=box_score_thresh,
                          rpn_anchor_generator=anchor_generator,
                          box_detections_per_img=box_detections_per_img,
-                         image_mean=[0.4950728416442871, 0.5257152915000916, 0.5137858986854553],
-                         image_std=[0.08277688175439835, 0.0893404483795166, 0.08817232400178909]
-                         )
+                         image_mean=dataset_mean,
+                         image_std=dataset_std)
 
     return model
 
@@ -89,7 +86,7 @@ def keypoint_detector(num_classes=cfg.CLASSES_NUMBER,
 class KeypointDetector:
     def __init__(
             self,
-            model_path=cfg.MODEL_PATH,
+            model_path=cfg.RCNN_MODEL_PATH,
             rpn_score_thresh=cfg.RPN_SCORE_THRESH,
             box_score_thresh=cfg.BOX_SCORE_THRESH,
             box_nms_thresh=cfg.BOX_NMS_THRESH,

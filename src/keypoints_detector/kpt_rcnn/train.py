@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 import warnings
 from argparse import ArgumentParser
 from pathlib import Path
@@ -8,15 +7,15 @@ from time import time, strftime, gmtime
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+import torch.nn.functional as F
 import torch.optim.lr_scheduler as lr_scheduler
 from torch.utils.tensorboard import SummaryWriter
 
 import keypoints_detector.config as cfg
-from keypoints_detector.dataset import create_dataloaders
-from keypoints_detector.model import keypoint_detector
-from keypoints_detector.test import test
-from keypoints_detector.utils import set_reproducibility_params, create_losses_dict
-import torch.nn.functional as F
+from keypoints_detector.kpt_rcnn.dataset import create_dataloaders
+from keypoints_detector.kpt_rcnn.model import keypoint_detector
+from keypoints_detector.kpt_rcnn.test import test
+from keypoints_detector.kpt_rcnn.utils import set_reproducibility_params, create_losses_dict
 
 set_reproducibility_params()
 writer = SummaryWriter("./runs/board_results")
@@ -158,7 +157,7 @@ def initialize_training_elements(args):
                                      annotation_file=args.annotation_directory,
                                      val_ratio=cfg.VAL_RATIO,
                                      test_ratio=cfg.TEST_RATIO,
-                                     transform_train=True)
+                                     transform_train=cfg.TRANSFORM_TRAIN)
     scheduler = lr_scheduler.MultiStepLR(optimizer,
                                          milestones=cfg.MILESTONES,
                                          gamma=cfg.GAMMA)

@@ -12,9 +12,9 @@ from PyQt5 import uic
 from PyQt5.QtCore import QEvent, Qt
 from PyQt5.QtCore import QThread, pyqtSignal
 from PyQt5.QtWidgets import QDialog
+from PyQt5.QtWidgets import QFileDialog, QTextEdit, QMainWindow
 from PyQt5.QtWidgets import QGraphicsScene, QGraphicsPixmapItem, QGraphicsItem, QGraphicsItemGroup, \
     QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsTextItem, QGraphicsWidget
-from PyQt5.QtWidgets import QPushButton, QFileDialog, QTextEdit, QMainWindow
 
 
 class MsgWorker(QThread):
@@ -68,8 +68,6 @@ class UI(QMainWindow):
     def __init__(self):
         super(UI, self).__init__()
         uic.loadUi("./gui/app_window.ui", self)
-        # self.setWindowIcon(QtGui.QIcon("./gui/icon.png"))
-        # print(QFile.exists("./gui/icon.png"))
         self.initialize_scene()
         self.textbox = self.findChild(QTextEdit, "textEdit")
         self.cursor = self.textbox.textCursor()
@@ -81,6 +79,7 @@ class UI(QMainWindow):
         self.image_data = defaultdict(lambda: None)
         self.inference_thread = None
         self.mass_calc_thread = None
+        self.report_thread = None
         self.correction_tool_thread = None
         self.current_image = 0
         self.images_paths = []
@@ -88,17 +87,25 @@ class UI(QMainWindow):
         self.start_msg_thread()
         self.follow_mouse_flag = False
         self.create_instance_flag = False
-        self.setMouseTracking(True)
         self.tard_num = 0
         self.memory_item = None
         self.memory_rect_pts = None
-
+        self.spline_interpolation_algorithm = None
+        self.inference_model_name = None
         self.point_size = 5
+        self.category_names = OrderedDict({
+            'eutardigrada black': 'eutar_bla',
+            'heterotardigrada echiniscus': 'heter_ech',
+            'eutardigrada translucent': 'eutar_tra',
+            'scale': 'scale'
+        })
+        self.models_names = {
+            'YOLOv8m pose': 'yolov8',
+            'keypoint RCNN': 'kpt_rcnn'
+        }
+
         self.connect_widgets()
-        self.category_names = OrderedDict({'eutardigrada black': 'eutar_bla',
-                                           'heterotardigrada echiniscus': 'heter_ech',
-                                           'eutardigrada translucent': 'eutar_tra',
-                                           'scale': 'scale'})
+        self.set_variables()
 
     def initialize_scene(self):
         self.scene = QGraphicsScene()
@@ -116,11 +123,22 @@ class UI(QMainWindow):
         self.inferenceButton.pressed.connect(self.start_inference)
         self.stopButton.pressed.connect(self.stop_processing)
         self.calculateButton.pressed.connect(self.start_calc_mass)
+        self.reportButton.pressed.connect(self.start_report)
+        self.clearButton.pressed.connect(self.clear_info)
+        self.interpolationComboBox.currentTextChanged.connect(self.curve_algorithm_change)
+        self.detectionComboBox.currentTextChanged.connect(self.detection_algorithm_change)
         # correction tool tab
         self.openImageButton.pressed.connect(self.open_image)
         self.nextButton.pressed.connect(self.next_image)
         self.previousButton.pressed.connect(self.previous_image)
         self.instanceButton.pressed.connect(self.create_instance)
+        self.scaleSpinBox.valueChanged.connect(self.scale_value_change)
+
+    def set_variables(self):
+        self.setWindowIcon(QtGui.QIcon("./gui/icons/tarmass_icon.png"))
+        self.setMouseTracking(True)
+        self.spline_interpolation_algorithm = self.interpolationComboBox.currentText()
+        self.detection_algorithm_change(self.detectionComboBox.currentText())
 
     def textbox_print_msg(self, msg):
         """Add message to the textbox of the application's 'Control' tab"""
@@ -143,27 +161,30 @@ class UI(QMainWindow):
         self.create_img_objects(img_path)
         self.pixmap.setPixmap(QtGui.QPixmap(str(img_path)))
         self.graphicsView.setScene(self.scene)
+        scale_val = self.image_data["scale_value"]
+        if scale_val is not None:
+            self.scaleSpinBox.setValue(scale_val)
 
     def select_folder_in(self):
         """Add images paths to the list and the application widget, show selected image"""
         self.images_paths = []
         self.imagesListWidget.clear()
         path = "" if self._folder_path_in is None else self._folder_path_in
+        if path == "" and self._folder_path_out is not None:
+            path = self._folder_path_out
         self._folder_path_in = Path(QFileDialog.getExistingDirectory(self, "Choose input directory", str(path)))
         images_extensions = ("png", "tif", "jpg", "jpeg")
-        i = 0
         for ext in images_extensions:
             ext_paths = list(self._folder_path_in.glob(f"*.{ext}"))
             self.images_paths.extend(ext_paths)
             for pth in ext_paths:
                 self.imagesListWidget.addItem(str(pth))
-                self.current_image = i
-                self.set_scene(pth)
-                i += 1
 
     def select_folder_out(self):
         """Set output folder for the 'Inference' and 'Calculate statistics' processes"""
         path = "" if self._folder_path_out is None else self._folder_path_out
+        if path == "" and self._folder_path_in is not None:
+            path = self._folder_path_in
         self._folder_path_out = Path(QFileDialog.getExistingDirectory(self, "Choose output directory", str(path)))
 
     def check_folders(self):
@@ -189,6 +210,10 @@ class UI(QMainWindow):
         """Override this method - calculate tardigrades masses based on inference output"""
         pass
 
+    def report_worker(self, stop):
+        """Override this method - generate final report"""
+        pass
+
     def start_inference(self):
         """Connected to the 'Inference' button - runs inference thread"""
         if self.stop_flag:
@@ -209,6 +234,28 @@ class UI(QMainWindow):
                 self.stop_flag = False
                 self.msg_queue.put("Calculating biomass started.\n")
 
+    def start_report(self):
+        """Connected to the 'Generate report' button - runs report thread"""
+        if self.stop_flag:
+            if self.check_folders():
+                self.report_thread = Thread(target=self.report_worker, daemon=True,
+                                            args=(lambda: self.stop_proc_threads_flag,))
+                self.report_thread.start()
+                self.stop_flag = False
+                self.msg_queue.put("Report generation started.\n")
+
+    def clear_info(self):
+        self.textbox.clear()
+        self.cursor.movePosition(QtGui.QTextCursor.End)
+        self.textbox.setTextCursor(self.cursor)
+
+    def curve_algorithm_change(self, method):
+        """Connected to the 'Line fitting algorithm' combo box - changes spline interpolation algorithm"""
+        self.spline_interpolation_algorithm = method
+
+    def detection_algorithm_change(self, method):
+        self.inference_model_name = self.models_names[method]
+
     def stop_processing(self):
         """Sends flag to stop processing for inference and mass calc threads"""
         if not self.stop_flag:
@@ -221,10 +268,14 @@ class UI(QMainWindow):
         """Connected to the 'Open selected image' button in 'Correction tool' tab -
         opends image selected in images list widget"""
         if len(self.images_paths) > 0:
-            img_path = self.imagesListWidget.currentItem().text()
-            img_num = self.imagesListWidget.currentRow()
-            self.current_image = img_num
-            self.set_scene(Path(img_path))
+            img_path = self.imagesListWidget.currentItem()
+            if img_path is not None:
+                img_num = self.imagesListWidget.currentRow()
+                self.current_image = img_num
+                self.set_scene(Path(img_path.text()))
+            else:
+                msg = "Image not selected.\n"
+                self.msg_queue.put(msg)
 
     def update_img(self, i):
         self.current_image += i
@@ -258,7 +309,8 @@ class UI(QMainWindow):
             for item in sel_items:
                 tard_item = item.data(1)
                 if tard_item:
-                    [self.scene.removeItem(pt) for pt in tard_item.get_keypoints()]
+                    for pt in tard_item.get_keypoints():
+                        self.scene.removeItem(pt)
                     self.scene.removeItem(tard_item.get_rectangle())
                     self.scene.removeItem(tard_item.get_label())
                     self.scene.removeItem(tard_item)
@@ -279,25 +331,26 @@ class UI(QMainWindow):
         :return: tuple - (x, y, w, h) rectangle coordinates
         """
         mouse_x, mouse_y = self.get_mouse_pos(event)
-        dx, dy = item.scenePos().x(), item.scenePos().y()
-        (x1m, y1m, wm, hm) = self.memory_rect_pts
-        cursor_x = mouse_x - dx
-        cursor_y = mouse_y - dy
-        top_left = (x1m, y1m)
-        w = abs(x1m - mouse_x)
-        h = abs(y1m - mouse_y)
+        x1, y1, x2, y2 = self.memory_rect_pts
+
+        pos_delta = item.pos()
+        dx, dy = pos_delta.x(), pos_delta.y()
+
+        x, y = x1, y1
+        w = abs(x - (mouse_x - dx))
+        h = abs(y - (mouse_y - dy))
 
         # resize rectangle in every direction
-        if cursor_x > x1m and cursor_y < y1m:
-            top_left = (x1m, cursor_y)
-        elif cursor_x < x1m and cursor_y < y1m:
-            top_left = (cursor_x, cursor_y)
-        elif cursor_x < x1m and cursor_y > y1m:
-            top_left = (cursor_x, y1m)
+        if mouse_x > x1 and mouse_y < y1:
+            x, y = x1, mouse_y
+        elif mouse_x < x1 and mouse_y < y1:
+            x, y = mouse_x, mouse_y
+        elif mouse_x < x1 and mouse_y > y1:
+            x, y = mouse_x, y1
 
-        item.setRect(*top_left, w, h)
+        item.setRect(x, y, w, h)
         self.update()
-        return *top_left, w, h
+        return [x, y, w, h]
 
     def update_keypoints(self, keypoints, rect):
         """
@@ -308,7 +361,7 @@ class UI(QMainWindow):
         x, y, w, h = rect
         dx = x - self.memory_rect_pts[0]
         dy = y - self.memory_rect_pts[1]
-
+        # TODO: refactor code
         if w > h:
             l_xs_range = np.array([w * 0.05, w * 0.95])
             w_ys_range = np.array([(h * 0.2), (h * 0.8)])
@@ -349,8 +402,9 @@ class UI(QMainWindow):
         l_pts = np.concatenate((l_xs, l_ys), axis=1)
         w_pts = np.concatenate((w_xs, w_ys), axis=1)
 
-        new_positions = np.concatenate((l_pts, w_pts))
-        [kpt.setPos(*new_pos) for kpt, new_pos in zip(keypoints, new_positions)]
+        for kpt, new_pos in zip(keypoints, np.concatenate((l_pts, w_pts))):
+            kpt.setPos(*new_pos)
+
         self.update()
 
     def eventFilter(self, source, event):
@@ -360,19 +414,25 @@ class UI(QMainWindow):
         :param event: QEvent
         :return: bool
         """
+
         # update rectangle position after double click
         if event.type() == QEvent.MouseMove and self.follow_mouse_flag:
             item = self.check_for_item(QGraphicsRectItem)
-            if item:
-                self.resize_rect(event, item)
+            if item and self.memory_rect_pts:
+                x, y, w, h = self.resize_rect(event, item)
+                self.memory_rect_pts = [x, y, x + w, y + h]
+                self.update()
 
         # update rectangle position after creating new instance
         if event.type() == QEvent.MouseMove and self.create_instance_flag and self.follow_mouse_flag:
             if isinstance(self.memory_item, TardigradeItem):
                 rect = self.resize_rect(event, self.memory_item.get_rectangle())
+                self.update()
                 self.update_keypoints(self.memory_item.get_keypoints(), rect)
             elif isinstance(self.memory_item, QGraphicsRectItem):
-                self.resize_rect(event, self.memory_item)
+                x, y, w, h = self.resize_rect(event, self.memory_item)
+                self.memory_rect_pts = [x, y, x + w, y + h]
+                self.update()
 
         # update label text
         if event.type() == QEvent.MouseButtonDblClick and not self.follow_mouse_flag:
@@ -396,7 +456,7 @@ class UI(QMainWindow):
                 # set new instance rectangle first point position
                 class_name = self.category_names[self.window.comboBox.currentText()]
                 rect_item = self.create_object_instance(class_name, event)
-                self.memory_rect_pts = self.get_position(rect_item)
+                self.memory_rect_pts = rect_item.rect().getCoords()
                 self.follow_mouse_flag = True
             self.update()
 
@@ -405,13 +465,16 @@ class UI(QMainWindow):
             self.follow_mouse_flag = True
             item = self.check_for_item(QGraphicsRectItem)
             if item:
-                self.memory_rect_pts = self.get_position(item)
-            self.update()
+                self.memory_rect_pts = item.rect().getCoords()
+                self.update()
 
-        # set rectangle position
+        # set rectangle position after double click
         if event.type() == QEvent.MouseButtonPress and self.follow_mouse_flag and not self.create_instance_flag:
             self.follow_mouse_flag = False
-            self.update()
+            item = self.check_for_item(QGraphicsRectItem)
+            if item:
+                self.memory_rect_pts = item.rect().getCoords()
+                self.update()
 
         # resize scene view
         if event.type() == QEvent.Wheel and source == self.graphicsView.viewport() and \
@@ -450,7 +513,6 @@ class UI(QMainWindow):
         self.memory_item = tard_item
         return rect_item
 
-    # TODO: Make it possible to change the scale value
     def create_scale(self, bbox):
         """
         Create scale bbox and label items
@@ -461,6 +523,13 @@ class UI(QMainWindow):
         rect_item, _ = self.add_rect(bbox, "scale", data=self.image_data["scale_value"], colour=colour)
         self.memory_item = rect_item
         return rect_item
+
+    def scale_value_change(self, value):
+        for item in self.scene.items():
+            if item.data(0) is not None and item.data(0)["label"] == "scale":
+                item.data(0)["value"] = value
+                item.setData(0, {"label": "scale", "value": value})
+                self.image_data["scale_value"] = value
 
     def create_object_instance(self, class_name, event):
         """
@@ -491,12 +560,12 @@ class UI(QMainWindow):
             if isinstance(item, TardigradeItem):
                 annotations.append({
                     "label": category_list.index(item.get_label().toPlainText()) + 1,
-                    "bbox": self.get_position(item.get_rectangle()),
-                    "keypoints": [self.get_position(pt)[:2] for pt in item.get_keypoints()]})
+                    "bbox": self.get_shifted_position(item.get_rectangle()),
+                    "keypoints": [self.get_shifted_position(pt)[:2] for pt in item.get_keypoints()]})
 
             elif item.data(0) is not None and item.data(0)["label"] == "scale":
                 img_data["scale_value"] = item.data(0)["value"]
-                img_data["scale_bbox"] = self.get_position(item)
+                img_data["scale_bbox"] = self.get_shifted_position(item)
 
         img_data["annotations"] = annotations
         ujson.dump(img_data, data_path.open("w"))
@@ -587,16 +656,25 @@ class UI(QMainWindow):
                 self.create_tardigrade(category_list[annot["label"] - 1], annot["bbox"], annot["keypoints"], i)
                 self.tard_num += 1
 
-    def get_position(self, obj):
+    def get_shifted_position(self, obj):
         """
         Get passed item position relative to the scene
         :param obj: QGraphicsRectItem/ QGraphicsItemGroup - object whose position is obtained
         :return: list with floating point object coordinates
         """
-        dx, dy = obj.scenePos().x(), obj.scenePos().y()
-        if isinstance(obj, QGraphicsItemGroup):
-            # shift position by the ellipse radius
+        dx, dy = 0, 0
+        x1, y1, x2, y2 = 0, 0, 0, 0
+
+        if isinstance(obj, QGraphicsRectItem):
+            x1, y1, x2, y2 = obj.rect().getCoords()
+            pos_d = obj.pos()
+            dx, dy = pos_d.x(), pos_d.y()
+
+        elif isinstance(obj, QGraphicsItemGroup):
+            x1, y1, x2, y2 = obj.shape().controlPointRect().getCoords()
+            pos_d = obj.pos()
+            dx, dy = pos_d.x(), pos_d.y()
             dx -= self.point_size / 2
             dy -= self.point_size / 2
-        x1, y1, x2, y2 = obj.shape().controlPointRect().getCoords()
+
         return [x1 + dx, y1 + dy, x2 + dx, y2 + dy]

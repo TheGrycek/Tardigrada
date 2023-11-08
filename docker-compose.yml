@@ -1,0 +1,23 @@
+version: "3"
+
+services:
+  processing-tardigrade:
+    container_name: tarmass
+    image: tardigrada:latest
+    build: .
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - .:/tarmass
+    stdin_open: true
+    tty: true
+    network_mode: "host"
+    ipc: host
+    environment:
+      DISPLAY: $DISPLAY
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [ gpu ]
+              count: 1

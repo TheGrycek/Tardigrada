@@ -1,26 +1,29 @@
 #!/usr/bin/env python3
-
 import argparse
 import logging
 import time
+import traceback
+from functools import partial
 from pathlib import Path
 
 import cv2
 import numpy as np
 import pandas as pd
 import ujson
-from scipy.interpolate import splprep, splev
+from scipy.interpolate import interp1d
+from ultralytics import YOLO
 
 import keypoints_detector.config as cfg
-from keypoints_detector.model import KeypointDetector
-from keypoints_detector.predict import predict
-from keypoints_detector.utils import calc_dist, calc_dimensions
+from keypoints_detector.kpt_rcnn.model import KeypointDetector
+from keypoints_detector.kpt_rcnn.predict import predict as predict_kpt_rcnn
+from keypoints_detector.kpt_rcnn.utils import calc_dimensions
+from keypoints_detector.yolo.predict import predict as predict_yolov8
 from scale_detector.scale_detector import read_scale
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-i", "--input_dir", type=Path, default="./images/test",
+    parser.add_argument("-i", "--input_dir", type=Path, default="./keypoints_detector/datasets/test",
                         help="Input images directory.")
     parser.add_argument("-o", "--output_dir", type=Path, default="../results/",
                         help="Outputs directory.")
@@ -28,67 +31,40 @@ def parse_args():
     return parser.parse_args()
 
 
-def fit_polynomial(bbox, points, keypoints_num):
-    bbox_w = bbox[0] - bbox[2]
-    bbox_l = bbox[1] - bbox[3]
-
-    pts_ind = [0, 1] if bbox_w <= bbox_l else [1, 0]
-
-    x = points[: keypoints_num - 2][:, pts_ind[0]]
-    y = points[: keypoints_num - 2][:, pts_ind[1]]
-
-    model = np.poly1d(np.polyfit(x, y, 5))
-    range_pts = [x[0], x[-1]]
-    lin_sp = np.arange(min(range_pts), max(range_pts), 10)
-    res = [lin_sp, model(lin_sp)]
-    pts = np.round(np.hstack((np.resize(res[pts_ind[0]], (res[pts_ind[0]].shape[0], 1)),
-                              np.resize(res[pts_ind[1]], (res[pts_ind[1]].shape[0], 1)))))
-    pts_num = pts.shape[0]
-
-    # TODO: create different error handling function
-    if pts_num == 0:
-        pts = np.reshape(bbox, ((bbox.size // 2), 2))
-        return pts
-
-    list_ind = [0, pts_num - 1]
-    distances = [calc_dist(pts[0], points[0]), calc_dist(pts[0], points[keypoints_num - 3])]
-    position = list_ind[distances.index(min(distances))]
-
-    insertion_ind = [keypoints_num - 3, 0] if position == 0 else [0, keypoints_num - 3]
-    inserted = np.append(pts, points[insertion_ind[0]])
-    inserted = np.insert(inserted, 0, points[insertion_ind[1]])
-
-    pts = np.reshape(inserted, ((inserted.size // 2), 2))
-    return pts
-
-
-def fit_bspline(bbox, points, keypoints_num):
+def fit_spline(bbox, points, keypoints_num, queue, method="quadratic", num_pts_inter=30):
     try:
-        x = points[: keypoints_num - 2][:, 0]
-        y = points[: keypoints_num - 2][:, 1]
-        tck, u = splprep([x, y], s=3)
-        pts = splev(u, tck)
-        pts = np.round(np.hstack((np.resize(pts[0], (pts[0].shape[0], 1)),
-                                  np.resize(pts[1], (pts[1].shape[0], 1)))))
-    except ValueError:
-        pts = np.reshape(np.array(bbox), ((bbox.size // 2), 2))
-        return pts
+        length_pts = points[: keypoints_num - 2]
+        distance = np.cumsum(np.sqrt(np.sum(np.diff(length_pts, axis=0) ** 2, axis=1)))
+        distance = np.insert(distance, 0, 0) / distance[-1]
+        interpolator = interp1d(distance, length_pts, kind=method, axis=0)
+        pts = interpolator(np.linspace(0, 1, num_pts_inter))
+    except:
+        error = "\nBspline error! No points correction added!\n" + traceback.format_exc()
+        logging.error(error)
+        queue.put(error)
+        box = np.array(bbox)
+        pts = np.reshape(box, ((box.size // 2), 2))
 
     return pts
 
 
-def calculate_mass(predicted, scale, img_path, curve_fit_algorithm="bspline"):
-    scale_ratio = scale["um"] / scale["bbox"][2]
+def calculate_mass(predicted, scale, img_path, curve_fit_algorithm="quadratic", queue=None):
+    """'Curve fit algorithms: [slinear', 'quadratic', 'cubic]'"""
+
+    if len(scale["bbox"]) == 0 or scale["bbox"][2] == 0:
+        error = f"[Error!] Empty scale bbox or scale length equals zero for image {img_path}"
+        logging.error(error)
+        if queue is not None:
+            queue.put(str(error) + "\n")
+        return pd.DataFrame(columns=["img_path", "id", "class", "length", "width", "biomass"]), []
+
+    scale_ratio = scale["um"] / abs(scale["bbox"][0] - scale["bbox"][2])
     density = 1.04
     results = []
     lengths_points = []
-    fit_algorithms = {
-        "bspline": fit_bspline,
-        "polynomial": fit_polynomial
-    }
 
     for i, (bbox, points) in enumerate(zip(predicted["bboxes"], predicted["keypoints"])):
-        length_pts = fit_algorithms[curve_fit_algorithm](bbox, points, cfg.KEYPOINTS)
+        length_pts = fit_spline(bbox, points, cfg.KEYPOINTS, queue, method=curve_fit_algorithm)
         lengths_points.append(length_pts)
         length, width = calc_dimensions(length_pts, points[-2:], scale_ratio)
         class_name = cfg.INSTANCE_CATEGORY_NAMES[predicted["labels"][i]]
@@ -103,12 +79,13 @@ def calculate_mass(predicted, scale, img_path, curve_fit_algorithm="bspline"):
                 mass = length * np.pi * (length / (2 * R)) ** 2 * density * 10 ** -6  # [ug]
 
             info = {
-                "img_path": img_path,
                 "id": i,
+                "img_path": img_path,
                 "class": class_name,
                 "length": length,
                 "width": width,
-                "biomass": mass
+                "biomass": mass,
+                "fitted_points": length_pts.tolist()
             }
 
             results.append(info)
@@ -128,20 +105,41 @@ def prepare_paths(args):
     return images_paths
 
 
-def run_inference(args, queue, stop, image_scale=None):
+def log_error_and_queue(queue, info):
+    logging.error(info)
+    queue.put(str(info) + "\n")
+
+
+def run_inference(args, queue, stop, model_name="kpt_rcnn", image_scale=None):
     images_paths = prepare_paths(args)
-    model = KeypointDetector(tiling=True)
+
+    inference_params = {
+        "kpt_rcnn": {
+            "model": partial(KeypointDetector, tiling=True),
+            "function": predict_kpt_rcnn
+        },
+
+        "yolov8": {
+            "model": partial(YOLO, cfg.YOLO_MODEL_PATH),
+            "function": predict_yolov8
+        }
+    }
+
+    model = inference_params[model_name]["model"]()
+
     for i, img_path in enumerate(images_paths, start=1):
         if stop():
             queue.put("Processing stopped.\n")
             break
+
         try:
             img = cv2.imread(str(img_path), 1)
 
             if image_scale is None:
                 image_scale, _ = read_scale(img, device="cpu")
 
-            predicted = predict(model, img)
+            predicted = inference_params[model_name]["function"](model, img)
+
             out_dict = {
                 "path": str(img_path),
                 "scale_bbox": image_scale["bbox"],
@@ -162,21 +160,22 @@ def run_inference(args, queue, stop, image_scale=None):
             ujson.dump(out_dict, out_path.open("w"))
             queue.put(f"[{i}/{len(images_paths)}] Image inferenced: {str(img_path)}\n")
 
-        except Exception as e:
-            logging.error(e)
-            queue.put(str(e) + "\n")
+        except:
+            log_error_and_queue(queue, traceback.format_exc())
 
     if not stop():
         queue.put(f"Inference finished.\n")
 
 
-def run_calc_mass(args, queue, stop):
+def run_calc_mass(args, queue, stop, curve_fit_algorithm="quadratic"):
     json_paths = list(args.output_dir.glob(f"*.json"))
+    df = pd.DataFrame()
 
     for i, json_path in enumerate(json_paths, start=1):
         if stop():
             queue.put("Processing stopped.\n")
             break
+
         annotation_dict = ujson.load(json_path.open("r"))
         img_path = Path(annotation_dict["path"])
         image_scale = {
@@ -184,16 +183,19 @@ def run_calc_mass(args, queue, stop):
             "bbox": annotation_dict["scale_bbox"]
         }
         predicted = {"keypoints": [], "bboxes": [], "labels": []}
+
         for annot in annotation_dict["annotations"]:
             predicted["keypoints"].append(annot["keypoints"])
             predicted["bboxes"].append(annot["bbox"])
             predicted["labels"].append(annot["label"])
 
         predicted["keypoints"] = np.round(predicted["keypoints"], 0)
-        results_df, lengths_points = calculate_mass(predicted, image_scale, str(img_path))
-        results_df.to_csv(args.output_dir / f"{img_path.stem}_results.csv")
-
+        results_df, lengths_points = calculate_mass(predicted, image_scale, str(img_path),
+                                                    curve_fit_algorithm, queue)
+        df = pd.concat([df, results_df])
         queue.put(f"[{i}/{len(json_paths)}] Mass calculated: {str(img_path)}\n")
+
+    df.to_csv(args.output_dir / "results.csv", index=False)
 
     if not stop():
         queue.put(f"Mass calculation finished.\n")
@@ -208,7 +210,7 @@ def visualize(args):
             start = time.time()
             img = cv2.imread(str(img_path), 1)
             image_scale, img = read_scale(img, device="cpu", visualize=True)
-            predicted = predict(model, img)
+            predicted = predict_kpt_rcnn(model, img)
             results_df, lengths_points = calculate_mass(predicted, image_scale, img_path)
 
             img = predicted["image"]
@@ -235,7 +237,13 @@ def visualize(args):
                                       cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
 
                 for pts in lengths_points:
-                    img = cv2.polylines(img, [pts.astype(np.int32)], False, (0, 255, 255), 2)
+                    pts_round = np.round(pts).astype(np.int32).reshape((-1, 1, 2))
+                    img = cv2.polylines(img, [pts_round], False, (0, 255, 255), 2)
+
+                for pts in predicted["keypoints"]:
+                    width_points = pts[-2:].astype(np.int32)
+                    img = cv2.line(img, tuple(width_points[0]), tuple(width_points[1]),
+                                   color=(0, 255, 255), thickness=2)
 
             else:
                 print(f"{'-' * 50}"
@@ -248,10 +256,10 @@ def visualize(args):
             # cv2.imwrite(str(args.output_dir / f"{img_path.stem}_results.jpg"), img)
 
             cv2.imshow('predicted', cv2.resize(img, (1400, 700)))
-            cv2.waitKey(1500)
+            cv2.waitKey(20000)
 
         except Exception as e:
-            print(e)
+            print(traceback.format_exc())
 
     print(f"\nProcessing finished.\n")
 

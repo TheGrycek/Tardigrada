@@ -1,0 +1,12 @@
+path: ../keypoints_detector/datasets/train_yolo
+train: autosplit_train.txt
+val: autosplit_val.txt
+test:
+
+kpt_shape: [7, 3]
+flip_idx: []
+
+names:
+  0: 'eutar_bla'
+  1: 'heter_ech'
+  2: 'eutar_tra'

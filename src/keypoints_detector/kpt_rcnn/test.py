@@ -4,10 +4,10 @@ import torch
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
 
 import keypoints_detector.config as cfg
-from keypoints_detector.dataset import create_dataloaders
-from keypoints_detector.model import KeypointDetector
-from keypoints_detector.utils import calc_oks
-from keypoints_detector.utils import tensor2rgb
+from keypoints_detector.kpt_rcnn.dataset import create_dataloaders
+from keypoints_detector.kpt_rcnn.model import KeypointDetector
+from keypoints_detector.kpt_rcnn.utils import calc_oks
+from keypoints_detector.kpt_rcnn.utils import tensor2rgb
 
 
 def prepare_annotation_dict(annotation_dict):
