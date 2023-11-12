@@ -1,5 +1,6 @@
 <img src="images/tarmass_logo.png" width="60"> *TarMass*
 ============
+## Fast and accurate tool for tardigrade biomass estimation
 
 ![GitHub repo size](https://img.shields.io/github/repo-size/TheGrycek/Tardigrada?logo=github)
 ![GitHub top language](https://img.shields.io/github/languages/top/TheGrycek/Tardigrada)
@@ -7,9 +8,8 @@
 ![GitHub issues](https://img.shields.io/github/issues/TheGrycek/Tardigrada)
 
 
-## Fast and accurate tool for tardigrade biomass estimation
 The TarMass desktop application enables automatic detection, classification,
-measurement and biomass estimation of tardigrade species on microscopic images.
+measurement and biomass estimation of tardigrade species in microscopic images.
 The integrated tools allow the user to manually correct the detections and generate PDF report with statistics.
 
 <p align="center">
@@ -48,7 +48,7 @@ cd src/
 Executable generation is done by `cx_freeze` package in `setup.py` file:
 
 ```bash
-setup.py build
+python3 setup.py build
 ```
 
 

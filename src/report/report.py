@@ -70,7 +70,7 @@ def generate_images(result_df, report_path, queue, stop, args):
         queue.put(f"Image processed: {str(img_path)}\n")
 
 
-def generate_report(args, queue, stop):
+def generate_report(args, icon_path, queue, stop):
     report_path = args.output_dir / "report"
     if report_path.is_dir():
         shutil.rmtree(str(report_path))
@@ -80,12 +80,12 @@ def generate_report(args, queue, stop):
     result_df = pd.read_csv(args.output_dir / "results.csv")
     result_df.fitted_points = result_df.fitted_points.apply(lambda x: np.array(ast.literal_eval(x)))
 
-    generate_pdf(result_df, report_path, queue)
+    generate_pdf(result_df, report_path, icon_path, queue)
     generate_images(result_df, report_path, queue, stop, args)
 
 
-def generate_pdf(df, report_path, queue):
-    pdf = ReportPDF(df, report_path)
+def generate_pdf(df, report_path, icon_path, queue):
+    pdf = ReportPDF(df, report_path, icon_path)
     pdf.generate()
     pdf.output(str(report_path / 'BiomassReport.pdf'))
     queue.put("Report generated.\n")

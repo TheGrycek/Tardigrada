@@ -1,4 +1,5 @@
 import random
+import sys
 from collections import OrderedDict, defaultdict
 from pathlib import Path
 from queue import Queue
@@ -7,14 +8,13 @@ from threading import Thread
 
 import numpy as np
 import ujson
-from PyQt5 import QtGui
-from PyQt5 import uic
-from PyQt5.QtCore import QEvent, Qt
-from PyQt5.QtCore import QThread, pyqtSignal
-from PyQt5.QtWidgets import QDialog
-from PyQt5.QtWidgets import QFileDialog, QTextEdit, QMainWindow
-from PyQt5.QtWidgets import QGraphicsScene, QGraphicsPixmapItem, QGraphicsItem, QGraphicsItemGroup, \
-    QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsTextItem, QGraphicsWidget
+from PyQt5 import QtGui, uic
+from PyQt5.QtCore import QThread, pyqtSignal, QEvent, Qt, QUrl
+from PyQt5.QtWidgets import (QDialog, QFileDialog, QTextEdit, QMainWindow, QGraphicsScene, QGraphicsPixmapItem,
+                             QGraphicsItem, QGraphicsItemGroup, QGraphicsEllipseItem, QGraphicsRectItem,
+                             QGraphicsTextItem, QGraphicsWidget)
+
+from gui.help_window import HelpWindow
 
 
 class MsgWorker(QThread):
@@ -33,9 +33,9 @@ class MsgWorker(QThread):
 
 class InstanceWindow(QDialog):
     """Window for screen object selection (scale, tardigrade black,...)"""
-    def __init__(self):
+    def __init__(self, file_dir):
         super(InstanceWindow, self).__init__()
-        uic.loadUi("./gui/instance_window.ui", self)
+        uic.loadUi(file_dir, self)
 
 
 class TardigradeItem(QGraphicsWidget):
@@ -67,11 +67,13 @@ class UI(QMainWindow):
     """Application functionality base class"""
     def __init__(self):
         super(UI, self).__init__()
-        uic.loadUi("./gui/app_window.ui", self)
+        uic.loadUi(str(self.find_file_dir("src/gui/app_window.ui")), self)
         self.initialize_scene()
         self.textbox = self.findChild(QTextEdit, "textEdit")
         self.cursor = self.textbox.textCursor()
         self.graphicsView.viewport().installEventFilter(self)
+        self.help_window = HelpWindow(str(self.find_file_dir("docs/user_manual.pdf")))
+        self.icon_path = Path(self.find_file_dir("src/gui/icons").parent / "icons/tarmass_icon.png")
         self.stop_flag = True
         self.stop_proc_threads_flag = False
         self._folder_path_in = None
@@ -107,6 +109,13 @@ class UI(QMainWindow):
         self.connect_widgets()
         self.set_variables()
 
+    @staticmethod
+    def find_file_dir(file_dir):
+        if getattr(sys, 'frozen', False):
+            return Path(sys.executable).parent / Path(file_dir).name
+        else:
+            return Path.cwd().parent / file_dir
+
     def initialize_scene(self):
         self.scene = QGraphicsScene()
         self.pixmap = QGraphicsPixmapItem()
@@ -119,6 +128,8 @@ class UI(QMainWindow):
         self.actionChange_Save_Dir.triggered.connect(self.select_folder_out)
         self.actionSave.setShortcut(QtGui.QKeySequence("Ctrl+s"))
         self.actionSave.triggered.connect(self.save_points)
+        self.menuHelp.triggered.connect(self.open_help)
+
         # control tab
         self.inferenceButton.pressed.connect(self.start_inference)
         self.stopButton.pressed.connect(self.stop_processing)
@@ -135,7 +146,7 @@ class UI(QMainWindow):
         self.scaleSpinBox.valueChanged.connect(self.scale_value_change)
 
     def set_variables(self):
-        self.setWindowIcon(QtGui.QIcon("./gui/icons/tarmass_icon.png"))
+        self.setWindowIcon(QtGui.QIcon(str(self.icon_path)))
         self.setMouseTracking(True)
         self.spline_interpolation_algorithm = self.interpolationComboBox.currentText()
         self.detection_algorithm_change(self.detectionComboBox.currentText())
@@ -201,6 +212,11 @@ class UI(QMainWindow):
             self.msg_queue.put(msg)
             return False
         return True
+
+    def open_help(self):
+        file_url = f"file://{self.help_window.pdf_dir}"
+        self.help_window.show()
+        self.help_window.webView.setUrl(QUrl(file_url))
 
     def inference_worker(self, stop):
         """Override this method - detect tardigrades and scales in images"""
@@ -488,7 +504,7 @@ class UI(QMainWindow):
 
     def create_instance(self):
         """Connected to 'Create instance' button - opens QDialog window for the object type selection"""
-        self.window = InstanceWindow()
+        self.window = InstanceWindow(str(self.find_file_dir("src/gui/instance_window.ui")))
         self.window.show()
         if self.window.exec():
             self.create_instance_flag = True

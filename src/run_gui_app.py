@@ -6,8 +6,8 @@ from collections import namedtuple
 from PyQt5.QtWidgets import QApplication
 
 from estimate_biomass import run_inference, run_calc_mass
-from report.report import generate_report
 from gui.main_window import UI
+from report.report import generate_report
 
 logging.basicConfig(level=logging.DEBUG, filename="logging.log")
 
@@ -36,7 +36,7 @@ class MainWindow(UI):
         """Runs in self.report_thread"""
         args = namedtuple("args", ["input_dir", "output_dir"])
         args_parsed = args(self._folder_path_in, self._folder_path_out)
-        generate_report(args_parsed, self.msg_queue, stop)
+        generate_report(args_parsed, self.icon_path, self.msg_queue, stop)
         self.stop_flag = True
         self.stop_proc_threads_flag = False
 
