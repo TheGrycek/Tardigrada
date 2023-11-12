@@ -21,14 +21,14 @@ Biomass estimation is done automatically, using few different algorithms:
 * specie length spline fitting - `quadratic`, `cubic`, `slinear`
 * scale detection - `cv2.findContours` [3] + `custom contour selector`
 
-Tardigrade mass approximation equations used, were introduced by Hallas & Yeates [4][5]:
+Tardigrade mass approximation equations used, were introduced by Hallas & Yeates [4], [5]:
 * *Eutardigrada*
 
-$$ W = L \pi ({L \over 2R}) \times 1.04 \times 10^-6\ [\micro g] $$
+$$ W = L \pi ({L \over 2R}) \times 1.04 \times 10^{-6}\ [\micro g] $$
 
 * *Heterotardigrada*
 
-$$ W = {1 \over 12} L \pi ({L \over R})^2 \times 1.04 \times 10^-6\ [\micro g] $$
+$$ W = {1 \over 12} L \pi ({L \over R})^2 \times 1.04 \times 10^{-6}\ [\micro g] $$
 
 *Where L is the length in μm, while R is the length-to-width ratio.*
 
