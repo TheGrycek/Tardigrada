@@ -4,7 +4,7 @@
 
 ![GitHub repo size](https://img.shields.io/github/repo-size/TheGrycek/Tardigrada?logo=github)
 ![GitHub top language](https://img.shields.io/github/languages/top/TheGrycek/Tardigrada)
-![GitHub release (with filter)](https://img.shields.io/github/v/release/TheGrycek/Tardigrada)
+![version](https://img.shields.io/badge/version-0.1.0-blue)
 ![GitHub issues](https://img.shields.io/github/issues/TheGrycek/Tardigrada)
 
 
