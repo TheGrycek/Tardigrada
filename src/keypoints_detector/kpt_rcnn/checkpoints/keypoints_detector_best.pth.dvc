@@ -1,0 +1,5 @@
+outs:
+- md5: b4b1be141ff7686d0ec68f900c14a489
+  size: 473408647
+  hash: md5
+  path: keypoints_detector_best.pth

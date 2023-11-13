@@ -8,7 +8,7 @@ import keypoints_detector.config as cfg
 
 
 class ReportPDF(FPDF):
-    def __init__(self, df, report_path):
+    def __init__(self, df, report_path, icon_path):
         super().__init__()
         self.width = 210
         self.height = 297
@@ -18,10 +18,10 @@ class ReportPDF(FPDF):
         self.report_path = Path(report_path)
         self.plots_path = self.report_path / "plots"
         self.plots_path.mkdir(exist_ok=True, parents=True)
+        self.icon_path = icon_path
 
     def header(self):
-        icon_path = Path(cfg.REPO_ROOT) / "src/gui/icons/tarmass_icon.png"
-        self.image(str(icon_path), 10, 8, 16)
+        self.image(str(self.icon_path), 10, 8, 16)
         self.set_font(self.font1, 'B', 15)
         self.cell(80)
         self.cell(30, 10, 'Biomass report', 0, align='C')

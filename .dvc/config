@@ -3,3 +3,4 @@
 ['remote "storage"']
     url = gdrive://1-jQK0UmeJgyjow4Shxm-rx0y_8KScSXd
     gdrive_acknowledge_abuse = true
+    gdrive_trash_only = true
