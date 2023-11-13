@@ -13,7 +13,7 @@ measurement and biomass estimation of tardigrade species in microscopic images.
 The integrated tools allow the user to manually correct the detections and generate PDF report with statistics.
 
 <p align="center">
-<img src="images/tarmass_desktop.png" width="500">
+<img src="images/tarmass_usage.gif" width="500">
 </p>
 
 Biomass estimation is done automatically, using few different algorithms:
