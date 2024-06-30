@@ -20,9 +20,11 @@ WORKDIR /tarmass
 COPY --from=build /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 ENV PYTHONPATH="/tarmass/src"
+ENV QTWEBENGINE_DISABLE_SANDBOX=1
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends apt-utils python3-opencv unzip python3 libxkbcommon-x11-0 && \
+    apt-get install -y --no-install-recommends apt-utils python3-opencv unzip python3 \
+    libxkbcommon-x11-0 libxcb-xinerama0 libxtst6 libasound2 && \
     python3 -c "import easyocr ; easyocr.Reader(['en'])" && \
     python -c "from torch.utils.model_zoo import load_url; load_url('https://download.pytorch.org/models/resnet50-11ad3fa6.pth')" && \
     apt-get clean && rm -rf /var/lib/apt/lists/*

@@ -1,8 +1,7 @@
 version: "3"
 
 services:
-  processing-tardigrade:
-    container_name: tarmass
+  x-common-processing: &common-processing
     image: tardigrada:latest
     build: .
     volumes:
@@ -14,6 +13,14 @@ services:
     ipc: host
     environment:
       DISPLAY: $DISPLAY
+
+  processing-cpu:
+    <<: *common-processing
+    profiles: [cpu]
+
+  processing-gpu:
+    <<: *common-processing
+    profiles: [gpu]
     deploy:
       resources:
         reservations:

@@ -2,11 +2,10 @@ import ast
 import shutil
 
 import cv2
+import keypoints_detector.config as cfg
 import numpy as np
 import pandas as pd
 import ujson
-
-import keypoints_detector.config as cfg
 from estimate_biomass import prepare_paths
 from report.pdf import ReportPDF
 

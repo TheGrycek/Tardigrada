@@ -4,8 +4,6 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 from fpdf import FPDF
 
-import keypoints_detector.config as cfg
-
 
 class ReportPDF(FPDF):
     def __init__(self, df, report_path, icon_path):
@@ -39,7 +37,7 @@ class ReportPDF(FPDF):
         stats = self.calculate_stats()
 
         cell_args = {"align": "L", "w": 0, "h": 4, "border": 0}
-        text = (f"Folder path: {stats['folder']} \n"
+        text = (f"Folder: {stats['folder']} \n"
                 f"Images number: {stats['img_num']} \n"
                 f"Animal number: {stats['animal_sum']} \n"
                 f"Total biomass: {stats['biomass_sum']} [µg] \n"
@@ -62,6 +60,14 @@ class ReportPDF(FPDF):
         self.add_page()
         self.page_body()
 
+    @staticmethod
+    def get_bins_num(data):
+        quartiles = data.quantile([0.25, 0.75])
+        iqr = quartiles[0.75] - quartiles[0.25]
+        bin_width = 2 * (iqr / (len(data) ** (1 / 3)))
+        bins_num = (data.max() - data.min()) / bin_width
+        return int(bins_num)
+
     def create_plot(self, kind, class_name, unit=None):
         plot_args = {
             "title": f"{class_name} count",
@@ -76,7 +82,7 @@ class ReportPDF(FPDF):
 
         elif kind == "hist":
             data = self.df[class_name]
-            fig = data.plot.hist(bins=len(data), alpha=1.0, **plot_args)
+            fig = data.plot.hist(bins=self.get_bins_num(data), alpha=1.0, **plot_args)
             plt.xlabel(f"{class_name} [{unit}]", fontsize=26)
 
         plt.ylabel("occurrence", fontsize=26)
@@ -96,16 +102,16 @@ class ReportPDF(FPDF):
         width_plot_dir = self.create_plot("hist", "width", "µm")
 
         output = {
-            "folder": str(Path(self.df.img_path.iloc[0]).parent),
+            "folder": str(Path(self.df.img_path.iloc[0]).name),
             "img_num": len(self.df.img_path.unique()),
             "animal_sum": len(self.df),
-            "biomass_sum": self.df.biomass.sum(),
-            "biomass_mean": self.df.biomass.mean(),
-            "biomass_std": self.df.biomass.std(),
-            "length_mean": self.df.length.mean(),
-            "length_std": self.df.length.std(),
-            "width_mean": self.df.width.mean(),
-            "width_std": self.df.width.std(),
+            "biomass_sum": round(self.df.biomass.sum(), 3),
+            "biomass_mean": round(self.df.biomass.mean(), 3),
+            "biomass_std": round(self.df.biomass.std(), 3),
+            "length_mean": round(self.df.length.mean(), 3),
+            "length_std": round(self.df.length.std(), 3),
+            "width_mean": round(self.df.width.mean(), 3),
+            "width_std": round(self.df.width.std(), 3),
             "classes_plot_dir": classes_plot_dir,
             "biomass_plot_dir": biomass_plot_dir,
             "length_plot_dir": length_plot_dir,

@@ -193,38 +193,6 @@
           <string>Correction tool</string>
          </attribute>
          <layout class="QGridLayout" name="gridLayout_5">
-          <item row="0" column="0">
-           <widget class="QPushButton" name="previousButton">
-            <property name="text">
-             <string>Previous</string>
-            </property>
-            <property name="icon">
-             <iconset>
-              <normaloff>icons/arrow-180.png</normaloff>icons/arrow-180.png</iconset>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="2">
-           <widget class="QPushButton" name="openImageButton">
-            <property name="text">
-             <string>Open selcted image</string>
-            </property>
-            <property name="icon">
-             <iconset>
-              <normaloff>icons/document.png</normaloff>icons/document.png</iconset>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="1">
-           <widget class="QLabel" name="label">
-            <property name="text">
-             <string>Scale value [ µm ]</string>
-            </property>
-           </widget>
-          </item>
-          <item row="5" column="0" colspan="2">
-           <widget class="QGraphicsView" name="graphicsView"/>
-          </item>
           <item row="0" column="1">
            <widget class="QPushButton" name="nextButton">
             <property name="text">
@@ -236,14 +204,49 @@
             </property>
            </widget>
           </item>
-          <item row="4" column="2">
+          <item row="5" column="2">
            <widget class="QLabel" name="label_4">
             <property name="text">
              <string>File list</string>
             </property>
            </widget>
           </item>
-          <item row="5" column="2">
+          <item row="0" column="0">
+           <widget class="QPushButton" name="previousButton">
+            <property name="text">
+             <string>Previous</string>
+            </property>
+            <property name="icon">
+             <iconset>
+              <normaloff>icons/arrow-180.png</normaloff>icons/arrow-180.png</iconset>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="0">
+           <widget class="QPushButton" name="instanceButton">
+            <property name="text">
+             <string>Create instance</string>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="0" colspan="2">
+           <widget class="QGraphicsView" name="graphicsView"/>
+          </item>
+          <item row="5" column="1">
+           <widget class="QSpinBox" name="scaleSpinBox">
+            <property name="maximum">
+             <number>999999999</number>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QLabel" name="label">
+            <property name="text">
+             <string>Scale value [ µm ]</string>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="2">
            <widget class="QListWidget" name="imagesListWidget">
             <property name="enabled">
              <bool>true</bool>
@@ -256,17 +259,21 @@
             </property>
            </widget>
           </item>
-          <item row="4" column="1">
-           <widget class="QSpinBox" name="scaleSpinBox">
-            <property name="maximum">
-             <number>999999999</number>
+          <item row="3" column="2">
+           <widget class="QPushButton" name="openImageButton">
+            <property name="text">
+             <string>Open selcted image</string>
+            </property>
+            <property name="icon">
+             <iconset>
+              <normaloff>icons/document.png</normaloff>icons/document.png</iconset>
             </property>
            </widget>
           </item>
-          <item row="4" column="0">
-           <widget class="QPushButton" name="instanceButton">
+          <item row="0" column="2">
+           <widget class="QCheckBox" name="autosaveBox">
             <property name="text">
-             <string>Create instance</string>
+             <string>AutoSave</string>
             </property>
            </widget>
           </item>

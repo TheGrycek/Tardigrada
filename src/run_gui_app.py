@@ -6,7 +6,6 @@ from collections import namedtuple
 from PyQt5.QtWidgets import QApplication
 
 from estimate_biomass import run_inference, run_calc_mass
-from report.report import generate_report
 from gui.main_window import UI
 from report.report import generate_report
 
